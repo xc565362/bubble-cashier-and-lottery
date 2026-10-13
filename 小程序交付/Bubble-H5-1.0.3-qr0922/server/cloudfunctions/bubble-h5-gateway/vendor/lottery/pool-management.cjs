@@ -5,6 +5,15 @@ const fault = (code, message) => Object.assign(new Error(message), { code });
 const fail = message => { throw fault('INVALID_CONFIG', message); };
 const hash = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const signature = inventory => JSON.stringify([1, inventory.total, Object.keys(inventory.quantities).sort().map(id => [id, inventory.quantities[id]])]);
+function normalizeRulesText(value) {
+  if (typeof value !== 'string') fail('活动说明必须为文本');
+  const normalized = value.replace(/\r\n?/g, '\n');
+  if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/.test(normalized)) fail('活动说明含有不支持的控制字符');
+  const text = normalized.trim();
+  if (text.length > 5000) fail('活动说明最多 5000 个字符');
+  return text;
+}
+const rulesTextSummary = value => ({ length: value.length, sha256: crypto.createHash('sha256').update(value).digest('hex') });
 
 function createPoolManagement({ store, campaign, prizes, now = Date.now, getCenter = async () => null, provisionCatalog }) {
   const key = campaign.id + ':management';
@@ -29,6 +38,7 @@ function createPoolManagement({ store, campaign, prizes, now = Date.now, getCent
     quantities(settings.quantities,catalog); weights(settings.weightsBps,catalog);
     for(const p of catalog)if(p.retired&&settings.weightsBps[p.id]!==0)fail('已停用奖项概率必须为0');
     settings.catalog=catalog;
+    settings.rulesText=normalizeRulesText(settings.rulesText === undefined ? '' : settings.rulesText);
     return settings;
   }
   async function readSettings(tx) {
@@ -80,12 +90,12 @@ function createPoolManagement({ store, campaign, prizes, now = Date.now, getCent
       return { service: 'bubble-lottery-management', version: 1, campaignId: campaign.id, title: campaign.title,
         revision: settings.revision, enabled: settings.enabled, mode: settings.mode, startsAt: campaign.startsAt, endsAt: campaign.endsAt, redemptionEndsAt: redemptionDeadline(campaign),
         total: config.total, allocated: stock.allocated, remaining: stock.remaining, blockedReason, audit,
-        catalog:settings.catalog, capabilities:[],
+        catalog:settings.catalog, rulesText:settings.rulesText, capabilities:['rules-text-v1'],
         prizes: settings.catalog.map(p => ({ ...p, amount: p.amount || 0,
           quota: config.quantities[p.id], allocated: config.quantities[p.id] - stock.quantities[p.id], remaining: stock.quantities[p.id],
           weightBps: settings.weightsBps[p.id], effectiveProbability: blockedReason || !stock.remaining || !settings.enabled || now()<campaign.startsAt || now()>=campaign.endsAt ? 0 : settings.mode === 'fixed' ? settings.weightsBps[p.id] / 100 : stock.quantities[p.id] / stock.remaining * 100 })) };
     });
-    try { result.center = await getCenter(result.catalog); if(result.center?.catalogSupported&&typeof provisionCatalog==='function')result.capabilities=['catalog-v1','lottery-catalog-v1']; } catch { result.center = null; result.centerError = '券中心数量暂时无法核对，暂停与降低名额以外的修改不可用'; }
+    try { result.center = await getCenter(result.catalog); if(result.center?.catalogSupported&&typeof provisionCatalog==='function')result.capabilities.push('catalog-v1','lottery-catalog-v1'); } catch { result.center = null; result.centerError = '券中心数量暂时无法核对，暂停与降低名额以外的修改不可用'; }
     // Only report identity returned by the verified center reader. This describes
     // the cloud redemption connection, not local SKU matching or stock readiness.
     const centerIdentity = typeof result.center?.centerId === 'string' && result.center.centerId.length > 0 &&
@@ -102,6 +112,9 @@ function createPoolManagement({ store, campaign, prizes, now = Date.now, getCent
     if (!input || !/^[a-zA-Z0-9_-]{16,80}$/.test(input.requestId || '') || !Number.isSafeInteger(input.expectedRevision) ||
       typeof input.reason !== 'string' || !input.reason.trim() || input.reason.length > 200) fail('请填写修改原因并刷新后再保存');
     if (!['pause', 'resume', 'configure'].includes(input.operation)) fail('不支持的奖池管理操作');
+    const hasRulesText = Object.prototype.hasOwnProperty.call(input, 'rulesText');
+    if (hasRulesText && input.operation !== 'configure') fail('请通过配置操作修改活动说明');
+    const requestedRulesText = hasRulesText ? normalizeRulesText(input.rulesText) : null;
     const requestKey = campaign.id + ':request:' + hash(input.requestId);
     const fingerprint = hash(input);
     const previous = await store.transaction(tx => tx.get('pools', requestKey));
@@ -136,6 +149,7 @@ function createPoolManagement({ store, campaign, prizes, now = Date.now, getCent
       if (settings.revision !== input.expectedRevision) throw fault('REVISION_CONFLICT', '配置已被另一台电脑修改，请刷新后重新核对');
       if (input.operation === 'configure' && settings.enabled) throw fault('POOL_ACTIVE', '请先暂停新抽奖，再调整模式、概率或名额');
       const next = { ...settings, enabled: input.operation === 'resume', ...(requested ? { mode: input.mode, quantities: requested, weightsBps: weightBps,catalog:requestedCatalog } : {}),
+        ...(hasRulesText ? { rulesText: requestedRulesText } : {}),
         revision: settings.revision + 1, updatedAt: now() };
       validate(next);
       const nextConfig = inventory(next);
@@ -160,9 +174,9 @@ function createPoolManagement({ store, campaign, prizes, now = Date.now, getCent
         if (!nextStock.remaining) throw fault('SOLD_OUT', '可抽名额已用完');
         assertFixedAvailable(next, nextStock);
       }
-      const audit = { revision: next.revision, at: next.updatedAt, actor, operation: input.operation, reason: input.reason.trim(),
-        before: { mode: settings.mode, enabled: settings.enabled, quantities: settings.quantities, weightsBps: settings.weightsBps,catalog:settings.catalog },
-        after: { mode: next.mode, enabled: next.enabled, quantities: next.quantities, weightsBps: next.weightsBps,catalog:next.catalog } };
+      const audit = { revision: next.revision, at: next.updatedAt, actor, operation: input.operation, reason: input.reason.trim(), rulesTextChanged: settings.rulesText !== next.rulesText,
+        before: { mode: settings.mode, enabled: settings.enabled, quantities: settings.quantities, weightsBps: settings.weightsBps,catalog:settings.catalog, rulesTextSummary: rulesTextSummary(settings.rulesText) },
+        after: { mode: next.mode, enabled: next.enabled, quantities: next.quantities, weightsBps: next.weightsBps,catalog:next.catalog, rulesTextSummary: rulesTextSummary(next.rulesText) } };
       await tx.set('pools', key, next);
       await tx.set('pools', campaign.id + ':stock', nextStock);
       await tx.set('pools', campaign.id + ':init', { ...marker, signature: nextStock.signature });

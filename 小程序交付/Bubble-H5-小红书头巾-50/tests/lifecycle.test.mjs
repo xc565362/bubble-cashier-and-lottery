@@ -197,6 +197,22 @@ test('home and rules render current prizes and exact probability while a winner 
   h.state.route='rules';h.render();assert.match(h.main.innerHTML,/27.5%/);assert.match(h.main.innerHTML,/新版奖品，共 260 份/);
   h.state.route='result';h.state.state.entry=safeEntry(old);h.render();assert.match(h.main.innerHTML,/原款魔术头巾/);assert.match(h.main.innerHTML,/https:\/\/example.invalid\/old.png/);assert.doesNotMatch(h.main.innerHTML,/新版奖品|new.png/);assert.match(h.main.innerHTML,/0 元核销领取/);
 });
+test('custom rules replace default prose as escaped multiline text while retaining live facts and the staff entrance',()=>{
+  const h=harness({isPreview:false,hasSession:()=>true},{route:'rules'});
+  const rulesText='第一行\n<img src=x onerror=alert(1)> & "引号"\n<script>alert(2)</script>\n'+ '长'.repeat(4900);
+  h.state.state={...frame(),campaign:{...campaign,title:'说明测试活动',startsAt:1800000000000,rulesText,winProbabilityBps:2750},prize:{name:'新奖品'},inventory:{total:260,remaining:260}};
+  h.render();
+  assert.ok(h.main.innerHTML.includes(`<div class="custom-rules-text">${escapeHtml(rulesText)}</div>`));
+  assert.doesNotMatch(h.main.innerHTML,/<script>|<img src=x|<h2>怎样参与<\/h2>/);
+  for(const fact of ['说明测试活动','新奖品，共 260 份','27.5%',dateLabel(1800000000000),'href="#/staff"'])assert.ok(h.main.innerHTML.includes(fact));
+  h.state.state.campaign.rulesText='';h.render();assert.match(h.main.innerHTML,/<h2>怎样参与<\/h2>/);assert.match(h.main.innerHTML,/活动时间与帮助/);assert.match(h.main.innerHTML,/参与记录用于防止重复抽奖/);assert.doesNotMatch(h.main.innerHTML,/custom-rules-text/);
+});
+test('rules page replaces saved text on refresh and defaults remain available for old responses',async()=>{
+  let rulesText='新的活动说明';const h=harness({isPreview:false,hasSession:()=>true,async call(){return {...frame(),campaign:{...campaign,rulesText}};}},{route:'rules'});
+  h.state.state={...frame(),campaign:{...campaign,rulesText:'旧的活动说明'}};h.render();
+  await h.load(true);assert.match(h.main.innerHTML,/新的活动说明/);assert.doesNotMatch(h.main.innerHTML,/旧的活动说明/);
+  rulesText=undefined;await h.load(true);assert.match(h.main.innerHTML,/<h2>怎样参与<\/h2>/);assert.match(h.main.innerHTML,/href="#\/staff"/);
+});
 
 test('cashier awards have no mobile redeem button and cannot call the legacy redeem API',async()=>{
   let calls=0;const h=harness({isPreview:false,hasSession:()=>true,async call(){calls++;}}, {route:'staff'});

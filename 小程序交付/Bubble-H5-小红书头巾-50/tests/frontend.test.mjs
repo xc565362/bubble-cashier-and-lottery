@@ -5,6 +5,14 @@ import {safeEntry,parseLaunch,CODE_PATTERN,INVITE_PATTERN,createEpoch,dateLabel,
 import {createApi} from '../public/api.mjs';
 const store=()=>{const data=new Map();return {getItem:k=>data.get(k),setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)};};
 const fixture=(randomBit=()=>0)=>{let seq=0;const memory=store();return {memory,api:createPreview(memory,{now:()=>1000,randomBit,randomCode:()=>String(++seq).padStart(14,'0')})};};
+test('isolated preview can set, preserve and clear rules text without changing a saved award',async()=>{
+  const {api}=fixture();assert.equal((await api.call('state')).campaign.rulesText,'');
+  const award=(await api.call('draw',{inviteCode:api.launchInvite()})).entry;
+  api.configure({rulesText:' 第一行\r\n\t第二行 '});assert.equal((await api.call('state')).campaign.rulesText,'第一行\n\t第二行');
+  api.configure({title:'改活动名'});assert.equal((await api.call('state')).campaign.rulesText,'第一行\n\t第二行');
+  for(const rulesText of [null,{},'坏\u0000字','字'.repeat(5001)])assert.throws(()=>api.configure({rulesText}));
+  api.configure({rulesText:''});const current=await api.call('state');assert.equal(current.campaign.rulesText,'');assert.deepEqual(current.entry,award);
+});
 test('winning and losing draws each consume one invitation and one participation',async()=>{
   for(const bit of [0,1]){let rolls=0;const {api}=fixture(()=>{rolls++;return bit;});const inviteCode=api.launchInvite();
     const results=await Promise.all(Array.from({length:12},()=>api.call('draw',{inviteCode})));

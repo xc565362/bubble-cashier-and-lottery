@@ -5,7 +5,7 @@ export function createPreview(storage,{now=Date.now,randomBit,randomRoll=()=>cry
   const read=()=>{let data;try{data=JSON.parse(storage.getItem(key)||'null');}catch{}return {entry:null,remaining:campaign.totalStock,invites:{},config:clone(campaign),fulfillment:'legacy',...data};};
   const write=data=>storage.setItem(key,JSON.stringify(data));
   const issue=data=>{const inviteCode='DE'+randomCode();data.invites[inviteCode]={expiresAt:now()+600000,used:false};return {inviteCode,expiresAt:data.invites[inviteCode].expiresAt};};
-  const frame=data=>({campaign:clone(data.config),prize:clone(data.config.prize),entry:clone(data.entry),inventory:{total:data.config.totalStock,remaining:data.remaining},requiresInvite:true,availability:{canDraw:!data.entry&&!forced&&data.remaining>0,reason:data.entry?'ALREADY_DRAWN':forced||(!data.remaining?'SOLD_OUT':'READY')}});
+  const frame=data=>({campaign:{...clone(data.config),rulesText:typeof data.config.rulesText==='string'?data.config.rulesText:''},prize:clone(data.config.prize),entry:clone(data.entry),inventory:{total:data.config.totalStock,remaining:data.remaining},requiresInvite:true,availability:{canDraw:!data.entry&&!forced&&data.remaining>0,reason:data.entry?'ALREADY_DRAWN':forced||(!data.remaining?'SOLD_OUT':'READY')}});
   return {
     isPreview:true,hasSession:()=>true,isOffline:()=>offline,
     launchInvite(){const data=read();const existing=Object.entries(data.invites).find(([,v])=>!v.used&&v.expiresAt>now());if(existing)return existing[0];const grant=issue(data);write(data);return grant.inviteCode;},
@@ -40,11 +40,12 @@ export function createPreview(storage,{now=Date.now,randomBit,randomRoll=()=>cry
       else {const lost=name==='lost';data.entry={outcome:lost?'lost':'won',status:lost?'lost':name==='won'?'pending':name,code:lost?'':'DE00000000000050',createdAt:now(),expiresAt:name==='expired'?now()-1:null,redeemedAt:name==='redeemed'?now():null,prize:clone(data.config.prize),fulfillment:data.fulfillment,fulfillmentStatus:data.fulfillment==='cashier'?'ready':'legacy'};data.remaining=lost?data.config.totalStock:Math.max(0,data.config.totalStock-1);}
       write(data);
     },
-    configure({title,venue,prize,winProbabilityBps,total,fulfillment}={}){
+    configure({title,venue,prize,winProbabilityBps,total,fulfillment,rulesText}={}){
       const data=read(),issued=data.config.totalStock-data.remaining;
+      if(rulesText!==undefined){if(typeof rulesText!=='string')throw new Error('活动说明须为文本');const lines=rulesText.replace(/\r\n?/g,'\n');rulesText=lines.trim();if(rulesText.length>5000||/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/.test(lines))throw new Error('活动说明不正确');}
       if(winProbabilityBps!==undefined&&(!Number.isInteger(winProbabilityBps)||winProbabilityBps<0||winProbabilityBps>10000))throw new Error('中奖概率不正确');
       if(total!==undefined&&(!Number.isSafeInteger(total)||total<issued))throw new Error('总奖品数不能小于已中奖数量');
-      data.config={...data.config,...(title!==undefined?{title}:{}),...(venue!==undefined?{venue}:{}),...(prize?{prize:clone(prize)}:{}),...(winProbabilityBps!==undefined?{winProbabilityBps}:{}),...(total!==undefined?{totalStock:total}:{})};
+      data.config={...data.config,...(title!==undefined?{title}:{}),...(venue!==undefined?{venue}:{}),...(rulesText!==undefined?{rulesText}:{}),...(prize?{prize:clone(prize)}:{}),...(winProbabilityBps!==undefined?{winProbabilityBps}:{}),...(total!==undefined?{totalStock:total}:{})};
       if(total!==undefined)data.remaining=total-issued;if(['legacy','cashier'].includes(fulfillment))data.fulfillment=fulfillment;
       write(data);return frame(data);
     },

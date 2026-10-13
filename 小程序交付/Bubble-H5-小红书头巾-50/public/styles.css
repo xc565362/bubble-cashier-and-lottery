@@ -255,6 +255,7 @@ dialog.modal::backdrop { background: rgb(13 39 50 / 48%); }
 .scanner p { margin: 10px 0; font-size: 13px; line-height: 1.8; }
 .scanner .secondary { margin-top: 10px; }
 .content > :is(.prize-summary, .draw-panel, .steps, .rule-list, .section-heading, .ticket, .detail-box, .staff-form, .staff-result, .grant-card, .empty-state, .preview-tools, .error-box, .loading) { margin-left: 0; margin-right: 0; }
+.custom-rules-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; margin-bottom: 20px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .hero-art.is-drawing .scarf-hero, .is-drawing .hero-art .scarf-hero { animation: scarf-sway 700ms cubic-bezier(.25, 1, .5, 1) infinite; }
 @keyframes scarf-sway { 0%, 100% { transform: rotate(-2deg) translateY(0); } 50% { transform: rotate(2deg) translateY(-4px); } }

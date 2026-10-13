@@ -20,7 +20,7 @@ function configuration(campaign, inventory) {
   return true;
 }
 function publicCampaign(campaign) {
-  return {id: CAMPAIGN_ID, title: campaign?.title || '山野有约', venue: campaign?.venue || '赛事现场 · Bubble 展位', enabled:campaign?.enabled===true,winProbabilityBps:campaign?.winProbabilityBps??5000, startsAt: validTime(campaign?.startsAt) ? campaign.startsAt : null, endsAt: validTime(campaign?.endsAt) ? campaign.endsAt : null, redeemEndsAt: validTime(campaign?.redeemEndsAt) ? campaign.redeemEndsAt : null};
+  return {id: CAMPAIGN_ID, title: campaign?.title || '山野有约', venue: campaign?.venue || '赛事现场 · Bubble 展位', rulesText:typeof campaign?.rulesText==='string'?campaign.rulesText:'', enabled:campaign?.enabled===true,winProbabilityBps:campaign?.winProbabilityBps??5000, startsAt: validTime(campaign?.startsAt) ? campaign.startsAt : null, endsAt: validTime(campaign?.endsAt) ? campaign.endsAt : null, redeemEndsAt: validTime(campaign?.redeemEndsAt) ? campaign.redeemEndsAt : null};
 }
 function publicEntry(row, now) {
   if (!row) return null;

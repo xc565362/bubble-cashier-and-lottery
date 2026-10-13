@@ -3,6 +3,8 @@ import { Check, CircleAlert, Cloud, Dices, Download, Link, Pause, Play, Plus, Pe
 import { sqbCall } from './sqb.jsx';
 import { lotteryDraft, lotteryPayload, percentToBps, prizeDefinition, retirePrize, safePrizeImage, lotteryConnectionProblem } from './lotterySettings.js';
 import { LotteryPrizeEditor } from './LotteryPrizeEditor.jsx';
+import { ActivityRulesEditor } from './ActivityRulesEditor.jsx';
+import { RULES_TEXT_CAPABILITY } from './rulesText.js';
 import './lottery.css';
 
 const call = (action, input = {}) => sqbCall('lottery-' + action, input);
@@ -106,7 +108,7 @@ export function LotteryManager({ products = [], onCashier }) {
       <div className="lotteryMode" role="group" aria-label="抽奖模式">{[['inventory', '按剩余名额'], ['fixed', '固定概率']].map(([key, label]) => <button key={key} type="button" aria-pressed={draft.mode === key} disabled={disabled || snapshot.enabled} onClick={() => { setDraft({ ...draft, mode: key }); setConfirmed(false); }}>{label}</button>)}</div>
       <div className="lotteryCatalogHeader"><div><strong>活动奖品 · {displayPrizes.filter(p => !p.retired).length} 项</strong><p className="lotteryHelp">保存到云端后，H5 首页和规则页会自动更新。已有中奖凭证保留原奖品。</p></div><button className="utilityButton" disabled={disabled || snapshot.enabled || !catalogReady} onClick={() => editPrize('add')}><Plus size={17} /> 新增奖项</button></div>
       {!catalogReady && <p className="lotteryNotice">当前云端版本支持名额与概率管理。升级抽奖服务和券服务后可开启奖品增删、图片和商品更换。</p>}
-      {snapshot.enabled && catalogReady && <p className="lotteryHelp">请先填写原因并暂停新抽奖，再编辑奖品。保存后核对手机页面，最后恢复抽奖。</p>}
+      {snapshot.enabled && <p className="lotteryHelp">请先填写原因并暂停新抽奖，再编辑奖品配置和活动说明。保存后核对手机页面，最后恢复抽奖。</p>}
       <div className="lotteryTableWrap"><table className="lotteryTable"><thead><tr><th>奖品</th><th>已抽中</th><th>剩余</th><th>券中心已核销</th><th>总名额</th><th>{draft.mode === 'fixed' ? '固定概率 %' : '当前概率 %'}</th><th>券发放上限</th></tr></thead><tbody>{displayPrizes.filter(p => !p.retired).map(p => <tr key={p.id}>
         <th scope="row"><div className="lotteryPrizeName">{safePrizeImage(p.imageUrl) && <img src={safePrizeImage(p.imageUrl)} alt="" referrerPolicy="no-referrer" />}<span>{p.name}<small>{p.kind === 'cash' ? `购物抵扣券 · ¥${p.amount}` : p.product ? `实物 · ${p.product.sku || p.product.barcode}` : '实物奖品'}</small></span></div>{catalogReady && <div className="lotteryPrizeActions"><button type="button" title="编辑名称和图片" aria-label={`编辑${p.name}展示`} disabled={disabled || snapshot.enabled} onClick={() => editPrize('edit', p)}><Pencil size={14} /> 展示</button><button type="button" aria-label={`更换${p.name}`} disabled={disabled || snapshot.enabled} onClick={() => editPrize('replace', p)}>更换奖品</button><button type="button" aria-label={`移除${p.name}`} disabled={disabled || snapshot.enabled} onClick={() => { setDraft(retirePrize(snapshot, draft, p.id)); setConfirmed(false); }}><Trash2 size={14} /> 移除</button></div>}</th><td>{p.allocated}</td><td>{p.remaining}</td><td>{snapshot.prizes.some(item => item.id === p.id) ? snapshot.center?.prizes?.[p.id]?.redeemed ?? '待核对' : '新奖项'}</td>
         <td><input aria-label={`${p.name}总名额`} type="number" min={p.allocated} max="1000000" step="1" disabled={disabled || snapshot.enabled} value={draft.quantities[p.id]} onChange={e => change('quantities', p.id, e.target.value)} /></td>
@@ -116,14 +118,16 @@ export function LotteryManager({ products = [], onCashier }) {
       {retired.length > 0 && <details className="lotteryRetired"><summary>已移除 {retired.length} 项 · 历史凭证保留</summary>{retired.map(p => <p key={p.id}>{p.name} · 已抽中 {p.allocated} 份，不再参与后续抽取</p>)}</details>}
       {draft.mode === 'fixed' && <p className={totalBps === 10000 ? 'lotterySum' : 'lotterySum dangerText'} role="status">概率合计：{totalBps === null ? '数值无效' : `${(totalBps / 100).toFixed(2)}%`} · 缺货处理：暂停新抽奖</p>}
       {!snapshot.center?.quotaAdjustmentSupported && <p className="lotteryNotice">券服务器尚未支持补充发放上限，增加抽奖名额仍受现有上限限制。</p>}
+      <ActivityRulesEditor id="lottery-rules-text" activity="此刻在地" value={draft.rulesText} supported={snapshot.capabilities?.includes(RULES_TEXT_CAPABILITY)} disabled={disabled || snapshot.enabled}
+        onChange={value => { setDraft(old => ({ ...old, rulesText: value })); setConfirmed(false); }} />
       <div className="lotteryEdit"><label>调整原因<input value={reason} maxLength={200} disabled={disabled} onChange={e => { setReason(e.target.value); setConfirmed(false); }} /></label>
-        <label className={`lotteryConfirm ${confirmed ? 'checked' : ''}`}><input type="checkbox" checked={confirmed} disabled={disabled} onChange={e => setConfirmed(e.target.checked)} /><span>{confirmed ? '已确认' : '待确认'} · 已核对名额与概率，调整只影响后续抽奖</span></label>
+        <label className={`lotteryConfirm ${confirmed ? 'checked' : ''}`}><input type="checkbox" checked={confirmed} disabled={disabled} onChange={e => setConfirmed(e.target.checked)} /><span>{confirmed ? '已确认' : '待确认'} · 已核对奖品配置和活动说明，已有中奖凭证保持原权益</span></label>
         <div className="lotteryActions">{snapshot.enabled ? <button className="utilityButton" disabled={disabled || !confirmed || !reason.trim()} onClick={() => update('pause')}><Pause size={17} /> 暂停新抽奖</button> : <>
           <button className="submitButton" disabled={disabled || !confirmed || !reason.trim() || (draft.mode === 'fixed' && totalBps !== 10000)} onClick={() => update('configure')}><Save size={17} /> 保存配置</button>
           <button className="utilityButton" disabled={disabled || !confirmed || !reason.trim() || !!centerProblem || JSON.stringify(draft) !== JSON.stringify(lotteryDraft(snapshot))} onClick={() => update('resume')}><Play size={17} /> 恢复新抽奖</button>
         </>}</div>
       </div>
-      <section className="lotteryAudit" aria-label="抽奖调整记录"><h3>调整记录</h3>{!snapshot.audit.length && <p>暂无调整记录</p>}{snapshot.audit.map(row => <details key={row.revision}><summary><span>{labels[row.operation]} · 版本 {row.revision}</span><time>{time(row.at)}</time><span>{row.reason}</span></summary><div className="lotteryAuditRows">{snapshot.prizes.map(p => <p key={p.id}>{p.name}：{auditValues(row.before, p.id)} → {auditValues(row.after, p.id)}</p>)}</div></details>)}</section>
+      <section className="lotteryAudit" aria-label="抽奖调整记录"><h3>调整记录</h3>{!snapshot.audit.length && <p>暂无调整记录</p>}{snapshot.audit.map(row => <details key={row.revision}><summary><span>{labels[row.operation]} · 版本 {row.revision}</span><time>{time(row.at)}</time><span>{row.reason}</span></summary><div className="lotteryAuditRows">{row.rulesTextChanged && <p>活动说明已更新</p>}{snapshot.prizes.map(p => <p key={p.id}>{p.name}：{auditValues(row.before, p.id)} → {auditValues(row.after, p.id)}</p>)}</div></details>)}</section>
     </>}
     {dialog && <ConnectionDialog connection={connection} busy={disabled} error={error} onClose={() => setDialog(false)} run={(fn, success, options = {}) => { if (options.refresh === false || !dirty || window.confirm('切换连接会放弃待保存配置，继续吗？')) return run(fn, success, options); }} onSuccess={() => setDialog(false)} />}
     {prizeEditor && <LotteryPrizeEditor editor={prizeEditor} products={products} onSave={savePrize} onClose={() => setPrizeEditor(null)} />}

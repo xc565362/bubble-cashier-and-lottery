@@ -1,8 +1,8 @@
 {
   "createdAt": "2026-09-29",
-  "updatedAt": "2026-10-08",
+  "updatedAt": "2026-10-13",
   "sourceDirectory": "D:\\2、bubble\\线下\\收银系统\\cashier-system-sqb\\lottery-backend",
-  "sourceType": "local-source-with-catalog-extension",
+  "sourceType": "local-source-with-catalog-and-rules-text-extension",
   "sourceModifiedLocally": true,
   "onlineDeploymentCompared": false,
   "includesPrivateConfiguration": false,
@@ -73,16 +73,16 @@
     },
     {
       "name": "pool-management.cjs",
-      "sha256": "5fce01847033d90f957b478180dfaac6d42136494118c7ca99da70c612702a2d",
-      "sourceLastWriteTime": "2026-10-08 18:53:17",
-      "bytes": 14606,
+      "sha256": "3552aab74bbfeac926c5ee21d0ba3f02ffbf948448d8de73debe8281dade3d24",
+      "sourceLastWriteTime": "2026-10-13T07:41:50.308Z",
+      "bytes": 15808,
       "matchesCanonical": true
     },
     {
       "name": "service.js",
-      "sha256": "6af80601882a2949e891395d89517843770fd1edcdb2026591465926fb653111",
-      "sourceLastWriteTime": "2026-09-30 10:42:39",
-      "bytes": 13795,
+      "sha256": "1870582689aaf8567a3dce3d3c90cfc889021048dc7e2c93dfebef579d05c66e",
+      "sourceLastWriteTime": "2026-10-13T07:41:50.310Z",
+      "bytes": 13829,
       "matchesCanonical": true
     },
     {

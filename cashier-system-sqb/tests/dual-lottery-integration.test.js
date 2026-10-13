@@ -6,6 +6,8 @@ import path from 'node:path';
 import net from 'node:net';
 import { createRequire } from 'node:module';
 import { priceOrder, completeOrder } from '../src/orderLogic.js';
+import { lotteryDraft, lotteryPayload } from '../src/lotterySettings.js';
+import { scarfDraft, scarfPayload } from '../src/scarfSettings.js';
 const require = createRequire(import.meta.url);
 const { createFixture, STAFF, VISITOR } = require('../scripts/dual-lottery-fixture.cjs');
 const { createPreviewServer, isAllowedAction } = require('../scripts/preview-dual-lottery.cjs');
@@ -87,6 +89,48 @@ test('changing either activity through the same cashier leaves the other configu
   assert.equal(scarfAfter.prize.name, '赛事运动水壶');
   assert.equal(scarfAfter.inventory.total, 210);
   assert.ok(f.counters.originalManagementRequests > 0 && f.counters.scarfManagementRequests > 0);
+});
+
+test('cashier rule edits round-trip through both signed management bridges to the correct H5 and can restore defaults', async t => {
+  const f = await fixture(t);
+  const reason = '隔离测试活动说明同步';
+  const originalText = '此刻在地 · 现场参与说明\n请在 Bubble 展位出示中奖凭证。\n\n<script>示例文字</script>';
+  const scarfText = '山野有约 · 关注抽好礼\n工作人员确认关注后扫码参加。\n中奖后凭领取码到收银台领取。';
+  await originalUpdate(f, 'pause');
+  await update(f, 'scarf', 'pause');
+  const beforeOriginal = await f.payments.dispatch('lottery-snapshot');
+  const beforeScarf = await f.payments.dispatch('scarf-snapshot');
+  assert.ok(beforeOriginal.capabilities.includes('rules-text-v1'));
+  assert.ok(beforeScarf.capabilities.includes('rules-text-v1'));
+  const saveOriginal = async rulesText => {
+    const current = await f.payments.dispatch('lottery-snapshot');
+    const draft = { ...lotteryDraft(current), rulesText };
+    return f.payments.dispatch('lottery-update', { ...lotteryPayload(current, draft, reason), requestId: crypto.randomUUID() });
+  };
+  const saveScarf = async rulesText => {
+    const current = await f.payments.dispatch('scarf-snapshot');
+    const draft = { ...scarfDraft(current), rulesText };
+    return f.payments.dispatch('scarf-update', { ...scarfPayload(current, draft, reason, f.products), requestId: crypto.randomUUID() });
+  };
+  await saveOriginal(originalText);
+  assert.equal((await f.original.call('state', {}, VISITOR)).campaign.rulesText, originalText);
+  assert.equal((await f.scarf.call('state', {}, VISITOR)).campaign.rulesText, '');
+  await saveScarf(scarfText);
+  assert.equal((await f.scarf.call('state', {}, VISITOR)).campaign.rulesText, scarfText);
+  assert.equal((await f.original.call('state', {}, VISITOR)).campaign.rulesText, originalText);
+  const afterOriginal = await f.payments.dispatch('lottery-snapshot');
+  const afterScarf = await f.payments.dispatch('scarf-snapshot');
+  assert.equal(afterOriginal.rulesText, originalText);
+  assert.equal(afterScarf.campaign.rulesText, scarfText);
+  assert.deepEqual(afterOriginal.prizes, beforeOriginal.prizes);
+  assert.deepEqual(afterScarf.prize, beforeScarf.prize);
+  assert.deepEqual(afterScarf.inventory, beforeScarf.inventory);
+  assert.equal(afterScarf.campaign.winProbabilityBps, beforeScarf.campaign.winProbabilityBps);
+  await saveOriginal('');
+  await saveScarf('');
+  assert.equal((await f.original.call('state', {}, VISITOR)).campaign.rulesText, '');
+  assert.equal((await f.scarf.call('state', {}, VISITOR)).campaign.rulesText, '');
+  assert.equal(f.counters.blockedExternalRequests, 0);
 });
 
 test('original physical prize, original cash coupon and scarf prize all redeem once through one cashier without crossing activities', async t => {

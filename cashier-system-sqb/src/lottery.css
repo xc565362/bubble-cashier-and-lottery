@@ -54,6 +54,16 @@
 .lotteryImagePreview { width: 130px; height: 110px; object-fit: contain; background: #f4f7f5; border-radius: 6px; }
 .lotteryRetired { padding: 15px 0; color: #536a62; font-size: 13px; }
 .lotteryRetired p { margin: 8px 0; }
+.activityRulesEditor { min-width: 0; margin-top: 20px; padding-top: 20px; border-top: 1px solid #d8e2dc; }
+.activityRulesHeading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.activityRulesHeading label { font-size: 16px; font-weight: 600; }
+.activityRulesHeading span { font-size: 13px; color: #536a62; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.activityRulesEditor textarea { display: block; box-sizing: border-box; width: 100%; min-height: 144px; margin-top: 10px; padding: 12px; font: inherit; line-height: 1.7; resize: vertical; border: 1px solid #bacdc3; border-radius: 6px; background: white; color: #243e33; }
+.activityRulesEditor textarea:disabled { background: #edf1ee; color: #536a62; }
+.activityRulesEditor textarea:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
+.activityRulesPreview { margin-top: 12px; padding: 14px; border-radius: 6px; background: #f3f7f5; }
+.activityRulesPreview strong { font-size: 13px; }
+.activityRulesPreview p { margin: 8px 0 0; font-size: 14px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 600px) {
   .lotteryHeading { align-items: flex-start; flex-direction: column; }
   .lotteryHeading strong { font-size: 16px; }

@@ -303,3 +303,6 @@ dialog.modal::backdrop { background: rgb(68 24 7 / 65%); }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
   .prize-tile.active, .primary:active:not(:disabled), .secondary:active:not(:disabled) { transform: none; }
 }
+
+/* Custom activity instructions are escaped text; long lines stay inside the card. */
+.custom-rules{overflow-wrap:anywhere}

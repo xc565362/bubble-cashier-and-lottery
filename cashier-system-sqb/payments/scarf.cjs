@@ -49,7 +49,13 @@ function createScarfBridge({ directory, protect = value => value, unprotect = va
     busy = true;
     try {
       if (action === 'connect') return await connect(input);
-      if (action === 'update') return await request('update', input);
+      if (action === 'update') {
+        if (input.campaign?.rulesText !== undefined) {
+          const current = await request('snapshot');
+          if (current.capabilities?.includes('rules-text-v1') !== true) throw new Error('山野有约的云端活动服务尚未支持活动说明，请先升级活动服务和 H5 页面再保存；本次没有修改配置');
+        }
+        return await request('update', input);
+      }
       if (action === 'export-connection') {
         if (!config) throw new Error('尚未连接头巾活动');
         return sealCredentials({ kind: 'scarf-management', ...config, key: unprotect(config.key) }, input.password);

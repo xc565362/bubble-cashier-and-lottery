@@ -8,6 +8,12 @@ const only=(value,keys)=>record(value)&&Object.keys(value).every(key=>keys.inclu
 const stable=value=>Array.isArray(value)?value.map(stable):record(value)?Object.fromEntries(Object.keys(value).sort().map(key=>[key,stable(value[key])])):value;
 const digest=value=>crypto.createHash('sha256').update(typeof value==='string'?value:JSON.stringify(stable(value))).digest('hex');
 function text(value,label,max=100,optional=false){if(typeof value!=='string'||(!optional&&!value.trim())||value.length>max||/[\u0000-\u001f]/.test(value))fail('INVALID_REQUEST',label+'不正确');return value.trim();}
+function rulesText(value){
+  if(typeof value!=='string')fail('INVALID_REQUEST','活动说明须为文本');
+  const lines=value.replace(/\r\n?/g,'\n'),normalized=lines.trim();
+  if(normalized.length>5000||/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/.test(lines))fail('INVALID_REQUEST','活动说明最多5000字，不能包含无效控制字符');
+  return normalized;
+}
 function time(value){if(value==null||value==='')return null;const v=typeof value==='string'?Date.parse(value):value;if(!Number.isSafeInteger(v)||v<=0)fail('INVALID_TIME','活动时间不正确');return v;}
 const validTimes=c=>Number.isSafeInteger(c.startsAt)&&Number.isSafeInteger(c.endsAt)&&Number.isSafeInteger(c.redeemEndsAt)&&c.startsAt>0&&c.startsAt<c.endsAt&&c.endsAt<=c.redeemEndsAt;
 function createManagementService({store,center,now=Date.now}) {
@@ -23,7 +29,7 @@ function createManagementService({store,center,now=Date.now}) {
       const history=campaign?.centerHistory||[];
       if(history.length&&center.redeemed)redeemed=(inventory?.legacyRedeemed||0)+await center.redeemed(history);
     }catch{ready=false;}
-    return {service:'bubble-scarf-management',version:1,campaignId:CAMPAIGN_ID,revision:campaign?.revision||0,campaign:publicCampaign(campaign),prize:campaign?.prize||{...PRIZE,product:null},inventory:{total:inventory?.total??TOTAL_STOCK,remaining:inventory?.remaining??TOTAL_STOCK,awarded:inventory?.awarded||0,redeemed},fulfillment:{ready,centerId:center?.centerId||'',environment:center?.environment||''},audit:campaign?.audit||[]};
+    return {service:'bubble-scarf-management',version:1,capabilities:['rules-text-v1'],campaignId:CAMPAIGN_ID,revision:campaign?.revision||0,campaign:publicCampaign(campaign),prize:campaign?.prize||{...PRIZE,product:null},inventory:{total:inventory?.total??TOTAL_STOCK,remaining:inventory?.remaining??TOTAL_STOCK,awarded:inventory?.awarded||0,redeemed},fulfillment:{ready,centerId:center?.centerId||'',environment:center?.environment||''},audit:campaign?.audit||[]};
   }
   return async function management(action,payload={}){
     if(action==='snapshot'){if(!only(payload,[]))fail('INVALID_REQUEST','请求参数无效');return snapshot();}
@@ -41,14 +47,15 @@ function createManagementService({store,center,now=Date.now}) {
     const before=initial.campaign;
     const identity=before?.centerIdentity||before?.center;
     if(identity&&center&&(identity.centerId!==center.centerId||identity.environment!==center.environment))fail('CENTER_MISMATCH','请恢复原券中心连接，不能将活动换到其他券中心',409);
-    const campaign={...publicCampaign(before),...before,managed:true,revision:payload.revision+1,audit:[...(before?.audit||[])],centerHistory:[...(before?.centerHistory||[])]};
+    const campaign={...publicCampaign(before),...before,rulesText:publicCampaign(before).rulesText,managed:true,revision:payload.revision+1,audit:[...(before?.audit||[])],centerHistory:[...(before?.centerHistory||[])]};
     if(identity)campaign.centerIdentity={centerId:identity.centerId,environment:identity.environment};
     const inventory=initial.inventory?{...initial.inventory}:defaults();
     if(!before?.managed)inventory.legacyRedeemed=inventory.redeemed;
     if(payload.operation==='configure'){
       if(before?.enabled)fail('PAUSE_REQUIRED','请先暂停活动再修改奖品和概率',409);
-      if(!only(payload.campaign,['title','venue','startsAt','endsAt','redeemEndsAt','winProbabilityBps'])||!only(payload.prize,['id','name','imageUrl','product']))fail('INVALID_REQUEST','奖品或活动内容不完整');
+      if(!only(payload.campaign,['title','venue','startsAt','endsAt','redeemEndsAt','winProbabilityBps','rulesText'])||!only(payload.prize,['id','name','imageUrl','product']))fail('INVALID_REQUEST','奖品或活动内容不完整');
       const c=payload.campaign;
+      if(Object.hasOwn(c,'rulesText'))campaign.rulesText=rulesText(c.rulesText);
       campaign.title=text(c.title,'活动名称',60);campaign.venue=text(c.venue,'活动地点',100);
       campaign.startsAt=time(c.startsAt);campaign.endsAt=time(c.endsAt);campaign.redeemEndsAt=time(c.redeemEndsAt);
       if(![campaign.startsAt,campaign.endsAt,campaign.redeemEndsAt].every(v=>v===null)&&!validTimes(campaign))fail('INVALID_TIME','请完整填写开始、结束与兑奖截止时间，并核对先后顺序');
@@ -87,7 +94,9 @@ function createManagementService({store,center,now=Date.now}) {
         if(!campaign.centerHistory.includes(campaign.center.campaignId))campaign.centerHistory.push(campaign.center.campaignId);
       }
     }
-    campaign.audit.push({at:now(),requestId:payload.requestId,operation:payload.operation,reason,revision:campaign.revision,before:{enabled:before?.enabled||false,total:initial.inventory?.total??TOTAL_STOCK,winProbabilityBps:before?.winProbabilityBps??5000,prizeId:before?.prize?.id||'scarf'},after:{enabled:campaign.enabled,total:inventory.total,winProbabilityBps:campaign.winProbabilityBps,prizeId:campaign.prize?.id||'scarf'}});
+    const beforeRules=publicCampaign(before).rulesText,afterRules=campaign.rulesText;
+    // Keep the bounded audit small even when each revision has a long rules body.
+    campaign.audit.push({at:now(),requestId:payload.requestId,operation:payload.operation,reason,revision:campaign.revision,rulesTextChanged:beforeRules!==afterRules,before:{enabled:before?.enabled||false,total:initial.inventory?.total??TOTAL_STOCK,winProbabilityBps:before?.winProbabilityBps??5000,prizeId:before?.prize?.id||'scarf',rulesTextSummary:{length:beforeRules.length,sha256:digest(beforeRules)}},after:{enabled:campaign.enabled,total:inventory.total,winProbabilityBps:campaign.winProbabilityBps,prizeId:campaign.prize?.id||'scarf',rulesTextSummary:{length:afterRules.length,sha256:digest(afterRules)}}});
     campaign.audit=campaign.audit.slice(-100);
     await store.transaction(async tx=>{
       const prior=await tx.get(MANAGEMENT_COLLECTION,operationId);

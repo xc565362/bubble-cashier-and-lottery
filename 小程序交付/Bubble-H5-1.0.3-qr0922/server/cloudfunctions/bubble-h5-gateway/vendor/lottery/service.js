@@ -109,7 +109,7 @@
             if (!['INVALID_CONFIG','POOL_NOT_READY','POOL_CORRUPT','POOL_CONFIG_MISMATCH'].includes(error.code)) throw error;
             drawError = error.message;
           }
-          const publicCampaign = {...campaign, redeemEndsAt:redemptionDeadline(campaign), ...(settings ? {enabled:settings.enabled,drawMode:settings.mode} : {}),inventory:inventory?{version:1,total:inventory.total}:null};
+          const publicCampaign = {...campaign, redeemEndsAt:redemptionDeadline(campaign), ...(settings ? {enabled:settings.enabled,drawMode:settings.mode} : {}),rulesText:settings?.rulesText??'',inventory:inventory?{version:1,total:inventory.total}:null};
           const publicPrizes = (settings?.catalog||prizes).filter(p=>!p.retired).map(prize=>{
             const {centerCampaignId,product,...visible}=prize;
             if(!settings)return {...visible,...(campaign.inventory?{quantity:(campaign.inventory.quantities||{})[prize.id]}:{})};

@@ -52,7 +52,7 @@ test('reusing an old ID for new entitlement, deleting historic IDs and invalid r
 
 test('catalog requires upgraded center; invalid metadata and forged center reference cannot bypass provision',async()=>{
   const f=await fixture();await f.update('pause');const snapshot=await f.pool.snapshot(),input={catalog:snapshot.catalog.concat(scarf),mode:'fixed',quantities:{cap:2,tote:2,scarf2:1},weightsBps:{cap:5000,tote:5000,scarf2:0}};
-  f.capable(false);await assert.rejects(f.update('configure',input),e=>e.code==='CATALOG_UNSUPPORTED');assert.equal(f.provisions(),0);assert.deepEqual((await f.pool.snapshot()).capabilities,[]);
+  f.capable(false);await assert.rejects(f.update('configure',input),e=>e.code==='CATALOG_UNSUPPORTED');assert.equal(f.provisions(),0);assert.deepEqual((await f.pool.snapshot()).capabilities,['rules-text-v1']);
   f.capable(true);for(const patch of [{imageUrl:'javascript:alert(1)'},{product:{id:'local',name:'missing code'}},{id:'unsafe/id'}])await assert.rejects(f.update('configure',{...input,catalog:snapshot.catalog.concat({...scarf,...patch})}));
   await f.update('configure',{...input,catalog:snapshot.catalog.concat({...scarf,centerCampaignId:'attacker-center',token:'NEVER_PUBLIC'})});const updated=await f.pool.snapshot();assert.equal(updated.catalog.find(p=>p.id==='scarf2').centerCampaignId,'center-scarf2');assert.equal(JSON.stringify(updated).includes('NEVER_PUBLIC'),false);assert.ok(updated.capabilities.includes('lottery-catalog-v1'));
 });

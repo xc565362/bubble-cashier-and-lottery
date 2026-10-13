@@ -49,6 +49,47 @@ test('configuration uses optimistic revisions, repeat requests are idempotent, a
   await assert.rejects(f.manage('update',{...p,requestId:'another-operation'}),{code:'REVISION_CONFLICT'});
   assert.equal(f.center.campaigns.size,1);
 });
+test('rules text saves normalized plain text, is public, and records compact audit evidence',async()=>{
+  const f=fixture(),initial=await f.manage('snapshot');
+  assert.equal(initial.campaign.rulesText,'');assert.ok(initial.capabilities.includes('rules-text-v1'));
+  const original='  第一行\r\n\t第二行\r第三行 <b>按文字展示</b>  ',expected='第一行\n\t第二行\n第三行 <b>按文字展示</b>';
+  const saved=await f.update('configure',{...f.configuration,campaign:{...f.configuration.campaign,rulesText:original}});
+  assert.equal(saved.campaign.rulesText,expected);assert.equal((await f.manage('snapshot')).campaign.rulesText,expected);
+  assert.equal((await f.state()).campaign.rulesText,expected);
+  const audit=saved.audit.at(-1);assert.equal(audit.rulesTextChanged,true);
+  assert.deepEqual(audit.before.rulesTextSummary,{length:0,sha256:crypto.createHash('sha256').update('').digest('hex')});
+  assert.deepEqual(audit.after.rulesTextSummary,{length:expected.length,sha256:crypto.createHash('sha256').update(expected).digest('hex')});
+  assert.equal(JSON.stringify(audit).includes('按文字展示'),false);
+});
+test('old clients preserve omitted rules text and explicit empty text restores defaults',async()=>{
+  const f=fixture();await f.update('configure',{...f.configuration,campaign:{...f.configuration.campaign,rulesText:'现场说明'}});
+  const preserved=await f.update('configure',f.configuration);assert.equal(preserved.campaign.rulesText,'现场说明');assert.equal(preserved.audit.at(-1).rulesTextChanged,false);
+  await f.update('resume');assert.equal((await f.state()).campaign.rulesText,'现场说明');
+  await assert.rejects(f.update('configure',{...f.configuration,campaign:{...f.configuration.campaign,rulesText:'另一份说明'}}),{code:'PAUSE_REQUIRED'});
+  await f.update('pause');assert.equal((await f.manage('snapshot')).campaign.rulesText,'现场说明');
+  for(const rulesText of ['',' \t\r\n ']){const saved=await f.update('configure',{...f.configuration,campaign:{...f.configuration.campaign,rulesText}});assert.equal(saved.campaign.rulesText,'');assert.equal((await f.state()).campaign.rulesText,'');}
+});
+test('rules text rejects invalid types, controls and oversize input before any campaign or center writes',async()=>{
+  const f=fixture();await f.update('configure',f.configuration);const before=f.store.rows(COLLECTIONS.campaigns),revision=(await f.manage('snapshot')).revision;
+  let provisions=0;f.center.provision=async()=>{provisions++;throw new Error('validation must reject first');};
+  for(const rulesText of [undefined,null,23,{},[], '字'.repeat(5001),'\u0000开头','结尾\u000b','\u000c','中\u001f间','中\u007f间','中\u0085间','中\u009f间']){
+    await assert.rejects(f.update('configure',{...f.configuration,campaign:{...f.configuration.campaign,rulesText}}),{code:'INVALID_REQUEST'});
+  }
+  assert.equal(provisions,0);assert.equal((await f.manage('snapshot')).revision,revision);assert.deepEqual(f.store.rows(COLLECTIONS.campaigns),before);
+});
+test('rules text enforces its limit after line-ending normalization and trim',async()=>{
+  const f=fixture(),body='界'.repeat(4998)+'\r\n界';
+  const saved=await f.update('configure',{...f.configuration,campaign:{...f.configuration.campaign,rulesText:'  '+body+'  '}});
+  assert.equal(saved.campaign.rulesText.length,5000);assert.equal(saved.campaign.rulesText.includes('\r'),false);
+  assert.ok(JSON.stringify(saved.audit.at(-1)).length<1500,'audit stores hashes rather than copies of a long body');
+});
+test('rules text updates retain revision conflicts and idempotency',async()=>{
+  const f=fixture(),payload={revision:0,requestId:'rules-operation-0001',operation:'configure',reason:'更新说明',...f.configuration,campaign:{...f.configuration.campaign,rulesText:'第一版'}};
+  await f.manage('update',payload);await f.manage('update',payload);assert.equal((await f.manage('snapshot')).audit.length,1);
+  await assert.rejects(f.manage('update',{...payload,requestId:'rules-operation-0002',campaign:{...payload.campaign,rulesText:'过期修改'}}),{code:'REVISION_CONFLICT'});
+  await assert.rejects(f.manage('update',{...payload,campaign:{...payload.campaign,rulesText:'不同正文'}}),{code:'REQUEST_CONFLICT'});
+  assert.equal((await f.state()).campaign.rulesText,'第一版');
+});
 test('only one competing configuration can commit its revision',async()=>{
   const f=fixture();const responses=await Promise.allSettled([1,2].map(i=>f.manage('update',{revision:0,requestId:'competing-operation-'+i,operation:'configure',reason:'并发保存',...f.configuration,total:200+i})));
   assert.equal(responses.filter(x=>x.status==='fulfilled').length,1);assert.equal(responses.find(x=>x.status==='rejected').reason.code,'REVISION_CONFLICT');assert.equal((await f.manage('snapshot')).audit.length,1);

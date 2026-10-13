@@ -1,4 +1,5 @@
 import { availablePrizeProducts, percentToBps, safePrizeImage } from './lotterySettings.js';
+import { normalizeRulesText, rulesTextPayload } from './rulesText.js';
 
 export const SCARF_CAMPAIGN_ID = 'scarf-xhs-50-v1';
 const clean = value => String(value || '').trim();
@@ -10,7 +11,7 @@ export function localDateTime(value) {
 }
 export function scarfDraft(snapshot) {
   const campaign = snapshot.campaign;
-  return { title: campaign.title, venue: campaign.venue || '', startsAt: localDateTime(campaign.startsAt), endsAt: localDateTime(campaign.endsAt),
+  return { title: campaign.title, venue: campaign.venue || '', rulesText: normalizeRulesText(campaign.rulesText ?? ''), startsAt: localDateTime(campaign.startsAt), endsAt: localDateTime(campaign.endsAt),
     redeemEndsAt: localDateTime(campaign.redeemEndsAt), percentage: String(campaign.winProbabilityBps / 100), total: String(snapshot.inventory.total),
     prize: { ...snapshot.prize, name: snapshot.prize.name || '', imageUrl: snapshot.prize.imageUrl || '', product: snapshot.prize.product ? { ...snapshot.prize.product } : null } };
 }
@@ -29,6 +30,7 @@ export function scarfConnectionProblem(snapshot, coupon) {
 }
 export function scarfPayload(snapshot, draft, reason, products) {
   if (snapshot.campaign.enabled) throw new Error('请先暂停新抽奖，再修改活动配置');
+  const description = rulesTextPayload(snapshot, draft.rulesText, snapshot.campaign.rulesText, '山野有约');
   const title = clean(draft.title), venue = clean(draft.venue), name = clean(draft.prize.name), imageUrl = clean(draft.prize.imageUrl);
   if (!title || title.length > 60 || /[\u0000-\u001f]/.test(title)) throw new Error('请填写活动名称，最多 60 字');
   if (!venue || venue.length > 100 || /[\u0000-\u001f]/.test(venue)) throw new Error('请填写活动地点，最多 100 字');
@@ -52,6 +54,6 @@ export function scarfPayload(snapshot, draft, reason, products) {
   if (dates.startsAt && (dates.endsAt <= dates.startsAt || dates.redeemEndsAt < dates.endsAt)) throw new Error('结束时间须晚于开始时间，核销截止时间不能早于结束时间');
   if (!clean(reason) || clean(reason).length > 200 || /[\u0000-\u001f]/.test(clean(reason))) throw new Error('请填写调整原因，最多 200 字');
   return { revision: snapshot.revision, operation: 'configure', reason: clean(reason), total: Number(draft.total),
-    campaign: { title, venue, ...dates, winProbabilityBps: percentToBps(draft.percentage) },
+    campaign: { title, venue, ...dates, winProbabilityBps: percentToBps(draft.percentage), ...description },
     prize: { id: draft.prize.id, name, imageUrl, product: { id: draft.prize.product.id, name: draft.prize.product.name, sku: clean(draft.prize.product.sku), barcode: clean(draft.prize.product.barcode) } } };
 }

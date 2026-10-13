@@ -1,3 +1,5 @@
+import { normalizeRulesText, rulesTextPayload } from './rulesText.js';
+
 export function percentToBps(value) {
   const text = String(value).trim();
   if (!/^\d{1,3}(\.\d{1,2})?$/.test(text)) throw new Error('概率须为 0 至 100，最多两位小数');
@@ -15,7 +17,7 @@ export function lotteryConnectionProblem(snapshot, coupon) {
   return '';
 }
 export function lotteryDraft(snapshot) {
-  return { mode: snapshot.mode, quantities: Object.fromEntries(snapshot.prizes.map(p => [p.id, String(p.quota)])),
+  return { mode: snapshot.mode, rulesText: normalizeRulesText(snapshot.rulesText ?? ''), quantities: Object.fromEntries(snapshot.prizes.map(p => [p.id, String(p.quota)])),
     percentages: Object.fromEntries(snapshot.prizes.map(p => [p.id, String(p.weightBps / 100)])),
     ...(snapshot.capabilities?.includes('catalog-v1') ? { catalog: structuredClone(snapshot.catalog || snapshot.prizes.map(prizeDefinition)) } : {}) };
 }
@@ -46,6 +48,7 @@ export function retirePrize(snapshot, draft, id) {
     quantities: { ...draft.quantities, [id]: String(allocated) }, percentages: { ...draft.percentages, [id]: '0' } };
 }
 export function lotteryPayload(snapshot, draft, reason) {
+  const description = rulesTextPayload(snapshot, draft.rulesText, snapshot.rulesText, '此刻在地');
   const quantities = {}, weightsBps = {};
   const items = draft.catalog || snapshot.prizes;
   if (draft.catalog && (!snapshot.capabilities?.includes('catalog-v1') || !items.some(p => !p.retired))) throw new Error('请至少保留一个可抽奖项，并确认云端支持奖品管理');
@@ -69,5 +72,6 @@ export function lotteryPayload(snapshot, draft, reason) {
   if (Object.values(weightsBps).reduce((sum, n) => sum + n, 0) !== 10000) throw new Error('固定概率合计必须为 100%');
   if (!reason.trim()) throw new Error('请填写调整原因');
   return { operation: 'configure', expectedRevision: snapshot.revision, mode: draft.mode, quantities, weightsBps, reason: reason.trim(),
+    ...description,
     ...(draft.catalog ? { catalog: draft.catalog.map(prizeDefinition) } : {}) };
 }

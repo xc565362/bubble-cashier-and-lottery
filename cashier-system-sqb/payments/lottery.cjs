@@ -55,9 +55,10 @@ function createLotteryBridge({ directory, protect = value => value, unprotect = 
         return await connect(value);
       }
       if (['update', 'increase-capacity'].includes(action)) {
-        if (action === 'update' && input.catalog !== undefined) {
+        if (action === 'update' && (input.catalog !== undefined || input.rulesText !== undefined)) {
           const current = await request('snapshot');
-          if (current.capabilities?.includes('lottery-catalog-v1') !== true) throw new Error('云端抽奖服务尚未支持完整奖项管理，请先升级后再保存；本次没有修改奖项');
+          if (input.rulesText !== undefined && current.capabilities?.includes('rules-text-v1') !== true) throw new Error('此刻在地的云端活动服务尚未支持活动说明，请先升级活动服务和 H5 页面再保存；本次没有修改配置');
+          if (input.catalog !== undefined && current.capabilities?.includes('lottery-catalog-v1') !== true) throw new Error('云端抽奖服务尚未支持完整奖项管理，请先升级后再保存；本次没有修改奖项');
         }
         return await request(action, input);
       }

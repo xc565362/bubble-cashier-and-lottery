@@ -4,6 +4,8 @@ import { sqbCall } from './sqb.jsx';
 import { LotteryManager } from './LotteryManager.jsx';
 import { availablePrizeProducts, safePrizeImage } from './lotterySettings.js';
 import { SCARF_CAMPAIGN_ID, matchingScarfProduct, scarfConnectionProblem, scarfDraft, scarfPayload } from './scarfSettings.js';
+import { ActivityRulesEditor } from './ActivityRulesEditor.jsx';
+import { RULES_TEXT_CAPABILITY } from './rulesText.js';
 import './lottery.css';
 import './scarf.css';
 
@@ -98,7 +100,7 @@ export function ScarfManager({ products = [], onCashier }) {
       <dl className="lotteryTotals scarfTotals"><div><dt>总名额</dt><dd>{snapshot.inventory.total}</dd></div><div><dt>剩余名额</dt><dd>{snapshot.inventory.remaining}</dd></div><div><dt>已中奖</dt><dd>{snapshot.inventory.awarded}</dd></div><div><dt>已核销</dt><dd>{snapshot.inventory.redeemed ?? '待核对'}</dd></div><div><dt>中奖概率</dt><dd>{(snapshot.campaign.winProbabilityBps / 100).toFixed(2)}<small>%</small></dd></div></dl>
       <div className={`lotteryNotice ${!loading && centerProblem ? 'dangerText' : ''}`} role="status"><Cloud size={18} /><span>{loading ? '正在核对核销连接…' : centerProblem || `核销已接入相同券中心 · ${coupon.environment === 'production' ? '正式环境' : '测试环境'}`}{couponError && ` ${couponError}`}</span></div>
       <div className="scarfRedemption"><div><strong>领奖核销</strong><p>回到「收银」扫描中奖条码 → 奖品免费入单 → 完成 0 元结算后发放。核销成功后扣减本机商品库存，H5 领取状态同步更新。</p></div>{onCashier && <button type="button" className="utilityButton" disabled={disabled} onClick={onCashier}><ShoppingCart size={17} /> 去收银核销</button>}</div>
-      {snapshot.campaign.enabled && <p className="lotteryHelp">修改奖品、概率或时间前，请先在下方填写原因并暂停新抽奖。</p>}
+      {snapshot.campaign.enabled && <p className="lotteryHelp">修改奖品、概率、时间或活动说明前，请先在下方填写原因并暂停新抽奖。</p>}
       <div className="scarfFields">
         <label>活动名称<input value={draft.title} maxLength={60} disabled={editingDisabled} onChange={e => change('title', e.target.value)} /></label>
         <label>活动地点<input value={draft.venue} maxLength={100} placeholder="越野赛事现场" disabled={editingDisabled} onChange={e => change('venue', e.target.value)} /></label>
@@ -115,15 +117,17 @@ export function ScarfManager({ products = [], onCashier }) {
         <label>核销截止时间<input type="datetime-local" value={draft.redeemEndsAt} disabled={editingDisabled} onChange={e => change('redeemEndsAt', e.target.value)} /></label>
         <p className="lotteryHelp">时间暂未确定时可以全部留空保存，活动保持暂停；填写完整时间并保存后才能开启。</p>
       </div>
+      <ActivityRulesEditor id="scarf-rules-text" activity="山野有约" value={draft.rulesText} supported={snapshot.capabilities?.includes(RULES_TEXT_CAPABILITY)} disabled={editingDisabled}
+        onChange={value => change('rulesText', value)} />
       <div className="lotteryEdit"><label>调整原因<input value={reason} maxLength={200} disabled={disabled} onChange={e => { setReason(e.target.value); setConfirmed(false); }} /></label>
-        <label className={`lotteryConfirm ${confirmed ? 'checked' : ''}`}><input type="checkbox" checked={confirmed} disabled={disabled} onChange={e => setConfirmed(e.target.checked)} /><span>{confirmed ? '已确认' : '待确认'} · 已核对奖品、名额和概率，已有中奖凭证保持原权益</span></label>
+        <label className={`lotteryConfirm ${confirmed ? 'checked' : ''}`}><input type="checkbox" checked={confirmed} disabled={disabled} onChange={e => setConfirmed(e.target.checked)} /><span>{confirmed ? '已确认' : '待确认'} · 已核对奖品配置和活动说明，已有中奖凭证保持原权益</span></label>
         <div className="lotteryActions">{snapshot.campaign.enabled ? <button className="utilityButton" disabled={disabled || !confirmed || !reason.trim()} onClick={() => update('pause')}><Pause size={17} /> 暂停新抽奖</button> : <>
           <button className="submitButton" disabled={disabled || !confirmed || !reason.trim()} onClick={() => update('configure')}><Save size={17} /> 保存头巾活动</button>
           <button className="utilityButton" disabled={disabled || !confirmed || !reason.trim() || dirty || !datesReady || !!centerProblem || snapshot.inventory.remaining <= 0} onClick={() => update('resume')}><Play size={17} /> 开启新抽奖</button>
         </>}</div>
         {!snapshot.campaign.enabled && <p className="lotteryHelp">开启条件：已保存配置、时间完整、剩余名额充足，并连接相同券中心。</p>}
       </div>
-      <section className="lotteryAudit" aria-label="头巾活动调整记录"><h3>调整记录</h3>{!snapshot.audit?.length && <p>暂无调整记录</p>}{(snapshot.audit || []).map(row => <details key={row.revision}><summary><span>{labels[row.operation] || row.operation} · 版本 {row.revision}</span><time>{dateText(row.at)}</time><span>{row.reason}</span></summary></details>)}</section>
+      <section className="lotteryAudit" aria-label="头巾活动调整记录"><h3>调整记录</h3>{!snapshot.audit?.length && <p>暂无调整记录</p>}{(snapshot.audit || []).map(row => <details key={row.revision}><summary><span>{labels[row.operation] || row.operation} · 版本 {row.revision}</span><time>{dateText(row.at)}</time><span>{row.reason}</span></summary>{row.rulesTextChanged && <div className="lotteryAuditRows"><p>活动说明已更新</p></div>}</details>)}</section>
     </>}
     {dialog && <ScarfConnectionDialog connection={connection} busy={disabled} error={error} onClose={() => setDialog(false)} run={(fn, success, refresh = true) => { if (!refresh || !dirty || window.confirm('切换连接会放弃待保存的头巾配置，继续吗？')) return run(fn, success, refresh); }} onSuccess={() => { setDialog(false); setMessage('头巾活动连接已保存'); }} />}
   </section>;
