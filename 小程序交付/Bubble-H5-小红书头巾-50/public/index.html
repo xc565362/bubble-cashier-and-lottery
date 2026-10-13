@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="no-referrer"><meta name="theme-color" content="#f4f9fc">
+  <title>山野有约 · Bubble 关注抽头巾</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='8' fill='%23ec704e'/%3E%3Ctext x='20' y='30' text-anchor='middle' fill='white' font-size='30' font-family='Arial' font-style='italic' font-weight='900'%3EB%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./styles.css"><script src="./runtime-config.js"></script><script defer src="./vendor/qrcode.js"></script><script defer src="./vendor/jsbarcode.js"></script><script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <div id="preview-banner" class="preview-banner" hidden>互动预览 · 演示奖品不能实际领取</div>
+    <header class="brand"><span class="wordmark">Bubble</span><span class="brand-label">越野赛事现场</span><span class="event-mark">关注有惊喜</span></header>
+    <div id="offline-banner" class="offline-banner" role="status" hidden>连接已中断，领取码暂时隐藏。恢复后会重新确认。</div>
+    <main id="main" class="screen" tabindex="-1"><p class="loading">正在加载山野好礼…</p></main>
+    <nav class="nav" aria-label="活动导航"><a class="item" data-page="home" href="#/home"><span class="icon" aria-hidden="true">✧</span>抽好礼</a><a class="item" data-page="result" href="#/result"><span class="icon" aria-hidden="true">♧</span>我的结果</a><a class="item" data-page="rules" href="#/rules"><span class="icon" aria-hidden="true">☰</span>活动说明</a></nav>
+  </div>
+  <dialog id="modal" class="modal" aria-labelledby="modal-title"></dialog><div id="toast" class="toast" role="status" hidden></div>
+  <noscript>请启用 JavaScript 后参与活动。</noscript>
+</body>
+</html>

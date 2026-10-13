@@ -1,0 +1,3 @@
+<view wx:if="loading" class="message">正在进入活动…</view>
+<view wx:if="error" class="message"><text>{{error}}</text><button bindtap="openActivity">重新进入</button></view>
+<web-view wx:if="src" src="{{src}}" binderror="handleError" />

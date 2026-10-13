@@ -1,0 +1,17 @@
+{
+  "campaignCollection": "bubble_scarf_campaigns",
+  "inventoryCollection": "bubble_scarf_inventory",
+  "documentId": "scarf-xhs-50-v1",
+  "campaign": {
+    "enabled": false,
+    "startsAt": null,
+    "endsAt": null,
+    "redeemEndsAt": null
+  },
+  "inventory": {
+    "total": 200,
+    "remaining": 200,
+    "awarded": 0,
+    "redeemed": 0
+  }
+}

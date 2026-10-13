@@ -1,0 +1,232 @@
+{
+  "sourceVersion": "1.0.3-qr0922",
+  "sourceDirectory": "D:\\2、bubble\\线下\\收银系统\\小程序交付\\小程序前端-二维码版",
+  "createdAt": "2026-09-29T10:35:22.9585055Z",
+  "files": [
+    {
+      "path": "miniprogram\\app.js",
+      "sha256": "0fda89a5e30088dc15853cd1bae2eff7de7c77bcabff218fba3ddc4bcf919da9"
+    },
+    {
+      "path": "miniprogram\\app.json",
+      "sha256": "ad10c280ba51894fc210aa3d2cc332e87cc76efd0a5d474f7057ce276c17746a"
+    },
+    {
+      "path": "miniprogram\\app.wxss",
+      "sha256": "6c5348dc8ef67693d85dc4d00ad8abf4e6d4bc7168023ab8187d5602cc7696c8"
+    },
+    {
+      "path": "miniprogram\\settings.js",
+      "sha256": "532b0949cf22ea1f4b7f2709d93f74275eedb309dfdfdee0d069416506f0e508"
+    },
+    {
+      "path": "miniprogram\\sitemap.json",
+      "sha256": "ee2a065f6746fad77bee83fe115d2988a8194363f3ef22569efc4a1ed7d0990a"
+    },
+    {
+      "path": "miniprogram\\assets\\bucket.svg",
+      "sha256": "f972a8a728672b5fd381b371410f9586362ddb5692e0d34146461e124b2836d6"
+    },
+    {
+      "path": "miniprogram\\assets\\cap.svg",
+      "sha256": "ab2fb0253cc8529978c66b84ff8b00e6e9b96d55c48943e28ac18fd1eb6b4845"
+    },
+    {
+      "path": "miniprogram\\assets\\mountains.svg",
+      "sha256": "d44b7718eee3a3ad179fbabd54b9e575a8d97aa23a987f3e62e91678f40fa0be"
+    },
+    {
+      "path": "miniprogram\\assets\\tote.svg",
+      "sha256": "9d042f1e401fb9ced7fd1ffc9b433fa4bf2f31cba0a7b9fea26e6d347c380922"
+    },
+    {
+      "path": "miniprogram\\assets\\waist.svg",
+      "sha256": "59e4f1adeaf1d0ea44418f4879a36d1ac9178b29bec0da7fc818420bfd34cbc1"
+    },
+    {
+      "path": "miniprogram\\components\\barcode\\barcode.js",
+      "sha256": "195291776bda3fc7433446ff0e73d2825ab03aff09978dccf019ce327c567473"
+    },
+    {
+      "path": "miniprogram\\components\\barcode\\barcode.json",
+      "sha256": "6bcc2e9e536384851fcfbdd823aee8ae4331243636adc4a656a64a44d9cf9318"
+    },
+    {
+      "path": "miniprogram\\components\\barcode\\barcode.wxml",
+      "sha256": "98f6237ec920776c0e923bd015317c81ab04f4d62b997896bde6f9682c9196d9"
+    },
+    {
+      "path": "miniprogram\\components\\barcode\\barcode.wxss",
+      "sha256": "da399162f53945baab852a55d34759942c6bc272fa979fe70cad670d05dfb6e2"
+    },
+    {
+      "path": "miniprogram\\components\\bottom-nav\\bottom-nav.js",
+      "sha256": "7180654edfb6b2e93232936aa9e4acfa0ba4e19ea8fb0b1a2c5f0bf0c52c70d0"
+    },
+    {
+      "path": "miniprogram\\components\\bottom-nav\\bottom-nav.json",
+      "sha256": "6bcc2e9e536384851fcfbdd823aee8ae4331243636adc4a656a64a44d9cf9318"
+    },
+    {
+      "path": "miniprogram\\components\\bottom-nav\\bottom-nav.wxml",
+      "sha256": "75d4c3fceb1ac49b1fb151a293595f165b06c8c8ba25d908f94bc386aab9656d"
+    },
+    {
+      "path": "miniprogram\\components\\bottom-nav\\bottom-nav.wxss",
+      "sha256": "eae8a64164589a5079083db95d0e1689ad7e94bae37ee44f07d72b81d018d4fb"
+    },
+    {
+      "path": "miniprogram\\components\\brand-header\\brand-header.js",
+      "sha256": "b71c9a79a564fd9bbfa998f4f68e7e079e275c0616523750f59727bf5c801849"
+    },
+    {
+      "path": "miniprogram\\components\\brand-header\\brand-header.json",
+      "sha256": "6bcc2e9e536384851fcfbdd823aee8ae4331243636adc4a656a64a44d9cf9318"
+    },
+    {
+      "path": "miniprogram\\components\\brand-header\\brand-header.wxml",
+      "sha256": "30d535b2d8cb4421f194c93c018b97e7799b442f535c375dc2e9bbf79186aea0"
+    },
+    {
+      "path": "miniprogram\\components\\brand-header\\brand-header.wxss",
+      "sha256": "99dfd6603b55240edebbbb45aa30e86b2f073d4818883e24520310a9d6c37db4"
+    },
+    {
+      "path": "miniprogram\\components\\prize-art\\prize-art.js",
+      "sha256": "d38a51c516299cb497b090566219f75a84ff3fc7ddad77f710271e85e13cdeb4"
+    },
+    {
+      "path": "miniprogram\\components\\prize-art\\prize-art.json",
+      "sha256": "6bcc2e9e536384851fcfbdd823aee8ae4331243636adc4a656a64a44d9cf9318"
+    },
+    {
+      "path": "miniprogram\\components\\prize-art\\prize-art.wxml",
+      "sha256": "72ef0e0d91488a866f0d8a2318773cb3e1476c75ce4c6335fffe0f99c418fc2a"
+    },
+    {
+      "path": "miniprogram\\components\\prize-art\\prize-art.wxss",
+      "sha256": "f45505d70600b404b2ede3b09b62660daea824d3efae88795a2088bee99602ce"
+    },
+    {
+      "path": "miniprogram\\components\\qr-code\\qr-code.js",
+      "sha256": "83eb2c1f122c7d899bbe61151ba7d858c4ceef15e88b44142abf48814a0e99b7"
+    },
+    {
+      "path": "miniprogram\\components\\qr-code\\qr-code.json",
+      "sha256": "6bcc2e9e536384851fcfbdd823aee8ae4331243636adc4a656a64a44d9cf9318"
+    },
+    {
+      "path": "miniprogram\\components\\qr-code\\qr-code.wxml",
+      "sha256": "100b8c6b8e6d59753cab7f0bb45a0ad98c136ee3e9afbce219de7c8f2e6ebf4a"
+    },
+    {
+      "path": "miniprogram\\components\\qr-code\\qr-code.wxss",
+      "sha256": "05ebb2fbaec7f77b3e8c52b90fedd7589c68ed5b2ea9a1c93d9ee006558eed4e"
+    },
+    {
+      "path": "miniprogram\\lib\\barcode.js",
+      "sha256": "e81c8a306c90e9fb229946f0dd85012d37d69d9b4bd6a8ecf777d0cf97997ee0"
+    },
+    {
+      "path": "miniprogram\\lib\\config.js",
+      "sha256": "f41cedcf82ff76df9b0fbd4d34fd91c334d4bb393abbb7b871768d5bcc59248e"
+    },
+    {
+      "path": "miniprogram\\lib\\demo.js",
+      "sha256": "ca9c2b1cbb6042d7d3986bd0fb93e4cc0e0f493544693784b37f37f5ffaa7e84"
+    },
+    {
+      "path": "miniprogram\\lib\\domain.js",
+      "sha256": "fb916328e420b53df5645051e504e476d583d0f7cc44f5d5ebf7f66d6489b7a3"
+    },
+    {
+      "path": "miniprogram\\lib\\jsbarcode.js",
+      "sha256": "2a123d7b59d76af3544043246df76b463a18226a2beea53e1e1b6bdd9d00c7b8"
+    },
+    {
+      "path": "miniprogram\\lib\\memory-store.js",
+      "sha256": "5487eb85978b156dfdfa25c5b3995f4a55e9182cf1bf4025f48ac9227345403b"
+    },
+    {
+      "path": "miniprogram\\lib\\qrcode.js",
+      "sha256": "18ae399f81182bc9de916e9c77b195df20cc58d6f2d55a62b085a299f1bf1780"
+    },
+    {
+      "path": "miniprogram\\lib\\service.js",
+      "sha256": "639a1fb89ddf435ee052efcb38c77465013d64ef2b4b29f6725037d266faac7c"
+    },
+    {
+      "path": "miniprogram\\pages\\home\\home.js",
+      "sha256": "0ece43be59370ca69c7cb54e4c6202734e3451bb764fd51577f095185a4e5052"
+    },
+    {
+      "path": "miniprogram\\pages\\home\\home.json",
+      "sha256": "5deab8e7297eecc3763bc05cb7a08241245cbc9cee1421e792602501203b8a08"
+    },
+    {
+      "path": "miniprogram\\pages\\home\\home.wxml",
+      "sha256": "7cd8190d892374459363fa5b3ffcde672cdb96f1df6092bbf38a426d251d691b"
+    },
+    {
+      "path": "miniprogram\\pages\\home\\home.wxss",
+      "sha256": "237495e257c56b16c522ded307d1d16f8870d4a79c8b1206e4b97067a2ddeed7"
+    },
+    {
+      "path": "miniprogram\\pages\\prize\\prize.js",
+      "sha256": "635ea6b6c9a1a6f8b1f134c15443b4e3119dc5da325a50877347302f9658c13d"
+    },
+    {
+      "path": "miniprogram\\pages\\prize\\prize.json",
+      "sha256": "3c2caedf5e0c2d50a2275056bf232d98df19dc026b5c71abaf080e7f8bdf3d6f"
+    },
+    {
+      "path": "miniprogram\\pages\\prize\\prize.wxml",
+      "sha256": "5db6769911aee8ed6c4a3d6b4ac840eba8a736b19409a9467826ed05d211277c"
+    },
+    {
+      "path": "miniprogram\\pages\\prize\\prize.wxss",
+      "sha256": "cc283baa6b0e763cc69152c17d7fed5b6cf6e321a58a07d05bc9632ba2d366df"
+    },
+    {
+      "path": "miniprogram\\pages\\rules\\rules.js",
+      "sha256": "b4f15cb29b4b2f40f4773a1727db4ca43e2e4b7651d5feb494d85ad875c0ccd7"
+    },
+    {
+      "path": "miniprogram\\pages\\rules\\rules.json",
+      "sha256": "93bc874325473d8264a506dcb23c44d04e9fd9d47cf6074efbce9190c2b3dfb9"
+    },
+    {
+      "path": "miniprogram\\pages\\rules\\rules.wxml",
+      "sha256": "9bf05b55c39467ee66131803f38cff1b56364721ca6857f43b907aa1d78ee381"
+    },
+    {
+      "path": "miniprogram\\pages\\rules\\rules.wxss",
+      "sha256": "ba4052979f1ebed563fb8054e745a163f9af31e7efd26c8b12b6848e778a9a3d"
+    },
+    {
+      "path": "miniprogram\\pages\\staff\\staff.js",
+      "sha256": "23882720671a59345a273fc1995b730e7af5d1a575046ee5e216f8669a577d85"
+    },
+    {
+      "path": "miniprogram\\pages\\staff\\staff.json",
+      "sha256": "f85d4d48641a10a239662bdad44524742a190c8dcb326030bd32f955f9578a4f"
+    },
+    {
+      "path": "miniprogram\\pages\\staff\\staff.wxml",
+      "sha256": "da366618f4d08d59de65eed192643cb688cbb7e1fc6776ca14659afa32450551"
+    },
+    {
+      "path": "miniprogram\\pages\\staff\\staff.wxss",
+      "sha256": "67d7bd757dfefb227ca5b649414c7960a3875ca6f1f5883e6d80e7fe422c9d87"
+    },
+    {
+      "path": "miniprogram\\utils\\api.js",
+      "sha256": "a696a0e00921a3e0f8b6762125d2be84e330908fbab2c33240e50663397b5c64"
+    },
+    {
+      "path": "miniprogram\\utils\\view.js",
+      "sha256": "c67061470623a62adefbcb43ae2397db178f437fb9de23f3442f61539b1df446"
+    }
+  ],
+  "productionChanged": false
+}

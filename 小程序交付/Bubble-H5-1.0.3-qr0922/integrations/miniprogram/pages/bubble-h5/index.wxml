@@ -1,0 +1,6 @@
+<web-view wx:if="{{src}}" src="{{src}}" binderror="handleError" />
+<view wx:else class="opening">
+  <text class="brand">Bubble</text>
+  <text class="message">{{loading ? '正在打开活动…' : error}}</text>
+  <button wx:if="{{!loading}}" bindtap="openActivity">重新打开</button>
+</view>

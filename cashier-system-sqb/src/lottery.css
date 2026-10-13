@@ -1,0 +1,65 @@
+.lotteryManager { min-width: 0; }
+.lotteryManager h2 { display: flex; align-items: center; gap: 8px; }
+.lotteryTools, .lotteryActions, .lotteryCapacity { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lotteryHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 0; border-bottom: 1px solid #d8e2dc; }
+.lotteryHeading small, .lotteryTable small { display: block; color: #536a62; margin-top: 4px; overflow-wrap: anywhere; }
+.lotteryStatus { color: #854d0e; background: #fef3c7; padding: 7px 10px; border-radius: 4px; font-size: 13px; }
+.lotteryStatus.running { color: #166534; background: #dcfce7; }
+.lotteryTotals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 18px 0; margin: 0; gap: 16px; }
+.lotteryTotals dt { color: #536a62; font-size: 13px; }
+.lotteryTotals dd { font-weight: 700; font-size: 24px; margin: 5px 0 0; font-variant-numeric: tabular-nums; }
+.lotteryMode { display: flex; margin: 12px 0 18px; gap: 4px; flex-wrap: wrap; }
+.lotteryMode button { border: 1px solid #cbdad2; padding: 10px 16px; border-radius: 4px; background: #f4f7f5; color: #334b42; }
+.lotteryMode button[aria-pressed="true"] { background: #0f766e; color: white; border-color: #0f766e; }
+.lotteryMode button:disabled { opacity: .7; }
+.lotteryTableWrap { overflow-x: auto; border-top: 1px solid #d8e2dc; }
+.lotteryTable { border-collapse: collapse; width: 100%; min-width: 790px; font-size: 13px; }
+.lotteryTable th, .lotteryTable td { text-align: left; padding: 12px 8px; border-bottom: 1px solid #d8e2dc; vertical-align: middle; }
+.lotteryTable thead th { background: #f3f6f4; color: #41584f; font-weight: 600; }
+.lotteryTable tbody th { min-width: 135px; }
+.lotteryTable input { width: 94px; min-height: 40px; height: 40px; padding: 8px; border: 1px solid #bacdc3; border-radius: 4px; font-variant-numeric: tabular-nums; }
+.lotteryTable input:disabled { color: #42584e; background: #edf1ee; opacity: 1; }
+.lotteryNotice { display: flex; align-items: flex-start; gap: 8px; background: #f4f7f5; padding: 12px; margin: 12px 0; overflow-wrap: anywhere; }
+.lotteryNotice svg { flex-shrink: 0; }
+.lotterySum { text-align: right; font-weight: 600; font-size: 13px; }
+.lotteryEdit { display: grid; gap: 14px; max-width: 760px; padding: 16px 0 24px; }
+.lotteryEdit label, .lotteryModal label { display: grid; gap: 8px; font-size: 14px; }
+.lotteryConfirm { display: flex !important; align-items: center; min-height: 52px; border: 2px solid #bccdc5; border-radius: 6px; padding: 10px; cursor: pointer; }
+.lotteryConfirm.checked { background: #e4f3ed; border-color: #0f766e; color: #115e59; }
+.lotteryConfirm input[type="checkbox"] { appearance: auto; width: 22px; height: 22px; min-height: 22px; padding: 0; flex-shrink: 0; accent-color: #0f766e; }
+.lotteryAudit { border-top: 1px solid #d8e2dc; padding-top: 20px; }
+.lotteryAudit h3 { font-size: 17px; margin: 0 0 12px; }
+.lotteryAudit details { padding: 12px 0; border-bottom: 1px solid #d8e2dc; }
+.lotteryAudit summary { cursor: pointer; font-size: 14px; overflow-wrap: anywhere; }
+.lotteryAudit summary span, .lotteryAudit time { margin-right: 12px; }
+.lotteryAudit time { color: #536a62; }
+.lotteryAuditRows { padding: 10px 0 0 16px; font-size: 13px; }
+.lotteryEmpty { padding: 40px 0; text-align: center; }
+.lotteryModal { width: min(520px, 100%); overflow-y: auto; }
+.lotteryModal form { display: grid; gap: 15px; }
+.lotteryModal > label { margin: 14px 0; }
+.lotteryModal h2 { font-size: 19px; }
+.lotteryTransfer { border-top: 1px solid #d8e2dc; margin-top: 20px; padding-top: 18px; display: grid; gap: 14px; }
+.lotteryManager button:focus-visible { outline: 2px solid #0f766e; outline-offset: 3px; }
+.lotteryCatalogHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; }
+.lotteryHelp { color: #536a62; font-size: 13px; line-height: 1.6; margin: 6px 0; }
+.lotteryPrizeName { display: flex; align-items: center; gap: 10px; min-width: 180px; }
+.lotteryPrizeName img { width: 42px; height: 42px; object-fit: contain; border-radius: 4px; background: #f4f7f5; }
+.lotteryPrizeActions { display: flex; gap: 10px; margin-top: 10px; }
+.lotteryPrizeActions button { display: inline-flex; align-items: center; gap: 3px; color: #0f766e; background: none; border: 0; padding: 5px 0; font-size: 12px; white-space: nowrap; }
+.lotteryPrizeActions button:disabled { color: #778981; }
+.lotteryFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.lotteryPrizeEditor { display: grid; gap: 14px; max-height: 90dvh; }
+.lotteryPrizeEditor input, .lotteryPrizeEditor select { min-width: 0; width: 100%; }
+.lotteryImagePreview { width: 130px; height: 110px; object-fit: contain; background: #f4f7f5; border-radius: 6px; }
+.lotteryRetired { padding: 15px 0; color: #536a62; font-size: 13px; }
+.lotteryRetired p { margin: 8px 0; }
+@media (max-width: 600px) {
+  .lotteryHeading { align-items: flex-start; flex-direction: column; }
+  .lotteryHeading strong { font-size: 16px; }
+  .lotteryTotals { gap: 8px; }
+  .lotteryTools .utilityButton { padding: 8px; }
+  .lotteryManager .sectionHeader { gap: 8px; flex-wrap: wrap; }
+  .lotteryActions button { flex: 1; justify-content: center; }
+  .lotteryAudit summary span { display: block; margin-bottom: 5px; }
+}

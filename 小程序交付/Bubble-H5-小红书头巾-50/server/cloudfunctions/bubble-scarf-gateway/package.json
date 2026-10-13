@@ -1,0 +1,9 @@
+{
+  "name": "bubble-scarf-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "type": "commonjs",
+  "engines": {"node": ">=18"},
+  "dependencies": {"wx-server-sdk": "4.0.2"}
+}

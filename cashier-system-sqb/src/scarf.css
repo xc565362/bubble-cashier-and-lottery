@@ -1,0 +1,23 @@
+.lotteryWorkspace { min-width: 0; }
+.lotteryCampaignTabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.lotteryCampaignTabs button { display: inline-flex; align-items: center; gap: 8px; background: #fff; color: #335449; border: 1px solid #cbdad2; border-radius: 6px; padding: 12px 18px; cursor: pointer; }
+.lotteryCampaignTabs button[aria-pressed="true"] { background: #0f766e; color: #fff; border-color: #0f766e; }
+.lotteryWorkspace > [hidden] { display: none; }
+.scarfFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding-top: 18px; }
+.scarfFields label { display: grid; gap: 8px; font-size: 14px; }
+.scarfFields input, .scarfFields select { min-width: 0; width: 100%; }
+.scarfWide { grid-column: 1 / -1; }
+.scarfTotals { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.scarfTotals dd small { font-size: 14px; font-weight: 500; margin-left: 2px; }
+.scarfRedemption { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin: 16px 0; padding: 16px; background: #f3f7f5; border: 1px solid #d8e2dc; border-radius: 6px; }
+.scarfRedemption p { margin: 6px 0 0; color: #536a62; font-size: 13px; line-height: 1.7; }
+.scarfRedemption button { flex-shrink: 0; }
+@media (max-width: 760px) {
+  .scarfTotals { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .scarfRedemption { align-items: flex-start; flex-direction: column; gap: 12px; }
+}
+@media (max-width: 520px) {
+  .scarfFields { grid-template-columns: minmax(0, 1fr); }
+  .lotteryCampaignTabs button { padding: 10px 12px; }
+  .scarfTotals dd { font-size: 22px; }
+}

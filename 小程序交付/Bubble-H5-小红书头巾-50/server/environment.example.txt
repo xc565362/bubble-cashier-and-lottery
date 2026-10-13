@@ -1,0 +1,17 @@
+# 仅填入云函数环境变量；不能放进网页、源码包或小程序客户端。
+H5_GATEWAY_ENABLED=0
+H5_BACKEND_REVIEWED=0
+H5_APP_ID=wx3cfec968f30fb6c1
+H5_APP_SECRET=
+H5_TOKEN_SECRET=
+H5_ALLOWED_ORIGINS=https://h5.example.com
+H5_API_BASE_PATH=/api/scarf-h5
+SCARF_CLOUD_ENV=
+SCARF_ADMIN_OPENIDS=
+# 收银管理专用：随机生成64位小写十六进制，只存服务器和收银本机。
+SCARF_MANAGEMENT_ENABLED=0
+SCARF_MANAGEMENT_KEY=
+# 与收银核销连接相同的正式券中心；此管理员令牌不能放入H5或收银管理表单。
+SCARF_COUPON_URL=https://coupon.example.com
+SCARF_COUPON_CENTER_ID=
+SCARF_COUPON_ADMIN_TOKEN=

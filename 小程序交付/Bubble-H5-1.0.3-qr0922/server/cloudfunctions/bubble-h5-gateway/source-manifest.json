@@ -1,0 +1,96 @@
+{
+  "createdAt": "2026-09-29",
+  "updatedAt": "2026-10-08",
+  "sourceDirectory": "D:\\2、bubble\\线下\\收银系统\\cashier-system-sqb\\lottery-backend",
+  "sourceType": "local-source-with-catalog-extension",
+  "sourceModifiedLocally": true,
+  "onlineDeploymentCompared": false,
+  "includesPrivateConfiguration": false,
+  "appId": "wx3cfec968f30fb6c1",
+  "files": [
+    {
+      "name": "activity-code.js",
+      "sha256": "a2917c79ddcf6280cc04db11685c391ec0f4c4a30c4c4c59e709d6ee8b16742f",
+      "sourceLastWriteTime": "2026-09-21 16:20:10",
+      "bytes": 2310,
+      "matchesCanonical": true
+    },
+    {
+      "name": "catalog-center.cjs",
+      "sha256": "bc819e64cace65985d47d8b86d9a879f6dbda6fbb6191bf6c1a710ee0aa1154d",
+      "sourceLastWriteTime": "2026-09-30 10:59:48",
+      "bytes": 2662,
+      "matchesCanonical": true
+    },
+    {
+      "name": "catalog.cjs",
+      "sha256": "d00bf66be466e11b7e1dda7c3590d4b2b602e833843d1f4c4ee02c4b07500848",
+      "sourceLastWriteTime": "2026-09-30 10:53:10",
+      "bytes": 2818,
+      "matchesCanonical": true
+    },
+    {
+      "name": "center-client.cjs",
+      "sha256": "dd9ef438a1dbf05241c1f4ea3fa28f59075f45e9a48d24cda0eab0046a868799",
+      "sourceLastWriteTime": "2026-09-21 16:20:10",
+      "bytes": 2163,
+      "matchesCanonical": true
+    },
+    {
+      "name": "center-lottery.cjs",
+      "sha256": "ec71b565810da40b55f5810fd1b9885a1f3cb5402ca99e02cf04e286a4ba8ab5",
+      "sourceLastWriteTime": "2026-09-30 10:49:47",
+      "bytes": 6681,
+      "matchesCanonical": true
+    },
+    {
+      "name": "config.js",
+      "sha256": "8180c8fe83e50cd535da3743389f1f5c377f30385f20c3915d1282bfcc8f548b",
+      "sourceLastWriteTime": "2026-09-22 17:50:34",
+      "bytes": 3228,
+      "matchesCanonical": true
+    },
+    {
+      "name": "domain.js",
+      "sha256": "cfdb04d2a8da8bd55839e0c06d1f622d9c44c296dd66d5b08d4f26f0dcb4c375",
+      "sourceLastWriteTime": "2026-09-30 10:42:39",
+      "bytes": 3833,
+      "matchesCanonical": true
+    },
+    {
+      "name": "management-center.cjs",
+      "sha256": "449c2546cf35762a7781389e749767f71909607fd5fb40423bb7b119a89341c1",
+      "sourceLastWriteTime": "2026-10-08 18:53:17",
+      "bytes": 5914,
+      "matchesCanonical": true
+    },
+    {
+      "name": "physical-center.cjs",
+      "sha256": "55c84a395cd6e8aacf276a9b6684842d66b3cc72bc7ecef7961c3dd55fa3b6c8",
+      "sourceLastWriteTime": "2026-09-30 10:46:00",
+      "bytes": 8119,
+      "matchesCanonical": true
+    },
+    {
+      "name": "pool-management.cjs",
+      "sha256": "5fce01847033d90f957b478180dfaac6d42136494118c7ca99da70c612702a2d",
+      "sourceLastWriteTime": "2026-10-08 18:53:17",
+      "bytes": 14606,
+      "matchesCanonical": true
+    },
+    {
+      "name": "service.js",
+      "sha256": "6af80601882a2949e891395d89517843770fd1edcdb2026591465926fb653111",
+      "sourceLastWriteTime": "2026-09-30 10:42:39",
+      "bytes": 13795,
+      "matchesCanonical": true
+    },
+    {
+      "name": "store.js",
+      "sha256": "b0d08c51ec970f56c3bc870712c0b9ccf1304ca9088c09131d55f3dee7c36480",
+      "sourceLastWriteTime": "2026-09-21 16:20:10",
+      "bytes": 1401,
+      "matchesCanonical": true
+    }
+  ]
+}

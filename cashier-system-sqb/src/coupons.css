@@ -1,0 +1,80 @@
+.couponManager { min-width: 0; }
+.couponManager h2, .couponTools, .couponToolbar, .couponCampaignHeading, .couponCampaignActions, .couponRowActions, .couponPagination { display: flex; align-items: center; gap: 10px; }
+.couponManager h2, .couponManager h3, .couponManager p { margin: 0; }
+.couponManager h2 { font-size: 19px; }
+.couponManager h3 { font-size: 16px; overflow-wrap: anywhere; }
+.couponToolbar, .couponCampaignHeading { justify-content: space-between; flex-wrap: wrap; }
+.couponToolbar { padding: 14px 0; }
+.couponToolbar .submitButton { width: auto; padding: 10px 14px; }
+.couponConnection { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-left: 3px solid #b47917; background: #fff8e9; color: #6b4d14; }
+.couponConnection.connected { border-color: #167965; background: #ecf7f0; color: #1d5f4b; }
+.couponConnection small, .couponKey small, .couponTable small { display: block; margin-top: 5px; font-size: 12px; color: #546362; overflow-wrap: anywhere; }
+.couponConnection > div, .couponKey > div { min-width: 0; overflow-wrap: anywhere; }
+.couponMessage { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px; background: #f2f4f5; border: 1px solid #d5dcdf; border-radius: 4px; overflow-wrap: anywhere; }
+.couponMessage .iconButton { flex-shrink: 0; }
+.couponTabs { display: flex; gap: 20px; border-bottom: 1px solid #d8e2dc; }
+.couponTabs button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; min-height: 44px; padding: 8px 3px; font-weight: 600; color: #566563; }
+.couponTabs button[aria-selected="true"] { color: #0f766e; border-bottom-color: #0f766e; }
+.couponLoading { font-size: 13px; color: #546362; }
+.couponEmpty { display: grid; justify-items: center; gap: 10px; padding: 32px 12px; color: #65716c; }
+.couponCampaigns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; }
+.couponCampaign { border: 1px solid #d3ddda; border-radius: 6px; padding: 16px; min-width: 0; background: #fff; }
+.couponCampaignHeading { align-items: flex-start; flex-wrap: nowrap; }
+.couponBadge { display: inline-block; flex-shrink: 0; padding: 4px 7px; border-radius: 4px; font-size: 12px; white-space: nowrap; background: #edf0f2; color: #52616b; }
+.couponBadge.AVAILABLE, .couponBadge.REDEEMED { background: #e7f3ec; color: #20643e; }
+.couponBadge.RESERVED, .couponBadge.PAYMENT_PENDING { background: #fff1ce; color: #745214; }
+.couponBadge.VOID { background: #fcecec; color: #953c3c; }
+.couponValue { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; padding: 18px 0 6px; }
+.couponValue strong, .couponDetailAmount { font-size: 27px; color: #0f766e; }
+.couponValue span { font-size: 13px; color: #546362; }
+.couponManager dl { margin: 12px 0; font-size: 13px; }
+.couponManager dl > div { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 6px; margin: 9px 0; align-items: start; }
+.couponManager dt { color: #596d64; }
+.couponManager dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.couponIdentifier { display: flex; gap: 5px; align-items: center; }
+.couponIdentifier code { font-size: 11px; overflow-wrap: anywhere; }
+.couponIdentifier .iconButton { flex-shrink: 0; width: 30px; height: 30px; min-height: 30px; }
+.couponCampaignActions { flex-wrap: wrap; border-top: 1px solid #e5e9e8; padding-top: 12px; }
+.couponCampaignActions .iconButton { margin-left: auto; }
+.couponFilters { display: grid; grid-template-columns: repeat(2, minmax(0, 230px)); gap: 12px; padding: 16px 0; }
+.couponFilters label { display: grid; gap: 6px; min-width: 0; font-size: 13px; }
+.couponFilters select { width: 100%; min-width: 0; padding: 10px; border: 1px solid #c8d5d0; border-radius: 5px; background: white; }
+.couponTableWrap { overflow-x: auto; width: 100%; }
+.couponTable { width: 100%; min-width: 650px; border-collapse: collapse; font-size: 13px; text-align: left; }
+.couponTable th { background: #f2f5f4; color: #52615b; font-weight: 600; }
+.couponTable th, .couponTable td { padding: 12px 10px; border-bottom: 1px solid #e1e7e4; vertical-align: middle; }
+.couponTable td:first-child { max-width: 220px; overflow-wrap: anywhere; }
+.couponPagination { justify-content: flex-end; padding-top: 12px; font-size: 13px; }
+.couponPagination > span { margin-right: auto; }
+.couponKey { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-bottom: 1px solid #e1e7e4; padding: 12px 0; }
+.couponKey > button { flex-shrink: 0; }
+.couponEndpoint { padding: 16px 0; border-bottom: 1px solid #e1e7e4; }
+.couponEditor { width: min(600px, 100%); }
+.couponForm { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.couponForm .fullField { grid-column: 1 / -1; }
+.couponForm label { min-width: 0; }
+.couponForm input, .couponForm select { width: 100%; min-width: 0; }
+.couponEditor textarea { width: 100%; padding: 12px; border: 1px solid #c8d5d0; resize: none; font-size: 13px; overflow-wrap: anywhere; }
+.couponEditor .submitButton { position: sticky; bottom: 0; min-height: 46px; }
+.modal.couponDetail { width: min(640px, 100%); justify-items: center; }
+.couponDetail .modalHead, .couponDetail dl { width: 100%; }
+.couponDetail h2 { overflow-wrap: anywhere; }
+.couponQr { width: min(280px, 100%); aspect-ratio: 1; height: auto; background: #fff; }
+.couponBarcode { width: min(100%, 600px); background: #fff; text-align: center; }
+.couponBarcode svg { display: block; width: 100%; height: auto; min-height: 90px; }
+.couponBarcode small { display: block; margin-top: 8px; font-size: 12px; color: #546362; }
+.couponWarning { padding: 10px 12px; border-left: 3px solid #b47917; background: #fff8e9; color: #795210; font-size: 13px; }
+.couponProgress { z-index: 45; place-items: center; }
+@media (max-width: 560px) {
+  .couponTabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
+  .couponTabs button { min-width: 0; font-size: 14px; white-space: nowrap; }
+  .couponManager .sectionHeader { flex-direction: row; align-items: center; }
+  .couponTools { gap: 6px; }
+  .couponTools .utilityButton { padding: 8px; }
+  .couponForm { grid-template-columns: minmax(0, 1fr); }
+  .couponFilters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .couponTabs { gap: 16px; }
+  .couponToolbar h3 { font-size: 14px; }
+  .couponCampaign { padding: 12px; }
+  .bottomNav button { flex-direction: column; gap: 3px; font-size: 12px; }
+}
