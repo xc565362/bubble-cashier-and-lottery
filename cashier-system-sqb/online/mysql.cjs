@@ -11,6 +11,11 @@
 const mysql = require('mysql2/promise');
 
 function createPool(env = process.env) {
+  // Local dev convenience: fall back to <project root>/.env.local when the
+  // process was started without env vars (pm2/production passes them inline).
+  if (env === process.env && !env.DB_HOST) {
+    try { process.loadEnvFile(require('node:path').join(__dirname, '..', '.env.local')); } catch {}
+  }
   for (const key of ['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD']) {
     if (!env[key]) throw new Error(`缺少数据库配置 ${key}，请设置环境变量或 .env.local`);
   }
