@@ -42,7 +42,7 @@ export const onlineHeaders = () => ({ 'X-Terminal-Id': onlineTerminalId(), ...(s
 
 export async function onlineRequest(path, { method = 'GET', body, allowUnauthorized = false } = {}) {
   await prepareOnlineTerminal();
-  const response = await fetch(`/api/online/${path}`, {
+  const response = await fetch(`/cashier-api/online/${path}`, {
     method, credentials: 'same-origin', cache: 'no-store',
     headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...onlineHeaders() },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -60,7 +60,7 @@ export async function onlineRequest(path, { method = 'GET', body, allowUnauthori
 export async function detectOnlineSession() {
   if (window.sqb) return null;
   await prepareOnlineTerminal();
-  const response = await fetch('/api/online/session', { credentials: 'same-origin', cache: 'no-store', headers: onlineHeaders() });
+  const response = await fetch('/cashier-api/online/session', { credentials: 'same-origin', cache: 'no-store', headers: onlineHeaders() });
   const local = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
   if (local && (response.status === 404 || response.ok && response.headers.get('content-type')?.includes('text/html'))) return null;
   let data;

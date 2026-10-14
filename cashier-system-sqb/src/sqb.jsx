@@ -27,7 +27,7 @@ export async function sqbCall(action, payload = {}) {
   let result;
   if (window.sqb) result = await window.sqb.call(action, payload);
   else {
-    const response = await fetch(`/api/sqb/${action}`, {
+    const response = await fetch(`/cashier-api/sqb/${action}`, {
       method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', ...onlineHeaders() }, body: JSON.stringify(payload), cache: 'no-store',
     });
     try { result = await response.json(); } catch { throw new Error('支付服务未启动，请使用新版桌面软件或本机支付服务'); }

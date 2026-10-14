@@ -42,7 +42,7 @@ test('cloud commands use same-origin cookies, CSRF, exact body, and no-store wit
   fixture(t); setOnlineSession({ csrfToken: 'isolated-csrf-token' });
   const command = { type: 'manual-complete', expectedRevision: 7, requestId: 'isolated-request', payload: { draft: { id: 'order-test' } } };
   globalThis.fetch = async (url, init) => {
-    assert.equal(url, '/api/online/command'); assert.equal(init.credentials, 'same-origin'); assert.equal(init.cache, 'no-store');
+    assert.equal(url, '/cashier-api/online/command'); assert.equal(init.credentials, 'same-origin'); assert.equal(init.cache, 'no-store');
     assert.equal(init.headers['X-CSRF-Token'], 'isolated-csrf-token'); assert.equal(init.headers['X-Terminal-Id'], onlineTerminalId()); assert.deepEqual(JSON.parse(init.body), command);
     return Response.json({ error: '账本已更新', code: 'REVISION_CONFLICT' }, { status: 409 });
   };

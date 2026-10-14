@@ -11,7 +11,8 @@ async function readBody(req, max = 2 * 1024 * 1024) {
 
 function paymentMiddleware(service, { notifications = false } = {}) {
   return async (req, res, next) => {
-    const pathname = req.url.split('?')[0];
+    // The frontend calls /cashier-api/* (production prefix); normalize to /api/*.
+    const pathname = req.url.split('?')[0].replace(/^\/cashier-api(?=\/)/, '/api');
     if (pathname === '/api/online/session' && req.method === 'GET') {
       res.statusCode = 404;
       res.setHeader('Content-Type', 'application/json; charset=utf-8');

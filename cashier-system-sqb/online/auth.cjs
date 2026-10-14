@@ -154,21 +154,31 @@ function createAuthStore({ pool, ns = '', now = Date.now } = {}) {
     const name = usernameOf(username);
     const input = { username: name, displayName: displayNameOf(displayName, name) };
     const hashed = await hashPassword(password);
-    return withTransaction(pool, async (q) => {
-      // RR snapshots cannot serialize the "first user" phantom; a server-wide
-      // named lock replaces SQLite's BEGIN IMMEDIATE single-writer guarantee.
-      const [lockRows] = await q.query('SELECT GET_LOCK(?, 10) AS acquired', [`pos_auth_init_${ns}`]);
+    // RR snapshots cannot serialize the "first user" phantom; a server-wide
+    // named lock replaces SQLite's BEGIN IMMEDIATE single-writer guarantee.
+    // The lock must be released only AFTER commit — releasing inside the
+    // transaction callback would let a concurrent initializer read before
+    // our row commits and double-initialize.
+    const conn = await pool.getConnection();
+    try {
+      const [lockRows] = await conn.query('SELECT GET_LOCK(?, 10) AS acquired', [`pos_auth_init_${ns}`]);
       if (Number(lockRows[0].acquired) !== 1) throw fail('AUTH_BUSY', '认证服务繁忙，请稍后重试', 503);
       try {
-        const [rows] = await q.query('SELECT id FROM pos_users WHERE ns = ? LIMIT 1', [ns]);
+        await conn.beginTransaction();
+        const [rows] = await conn.query('SELECT id FROM pos_users WHERE ns = ? LIMIT 1', [ns]);
         if (rows.length) throw fail('ALREADY_INITIALIZED', '管理员已初始化', 409);
-        const user = await insertUser(q, input, 'admin', hashed);
-        await audit(q, 'admin.initialized', user.id, user.id);
+        const user = await insertUser(conn, input, 'admin', hashed);
+        await audit(conn, 'admin.initialized', user.id, user.id);
+        await conn.commit();
         return user;
-      } finally {
-        await q.query('SELECT RELEASE_LOCK(?)', [`pos_auth_init_${ns}`]).catch(() => {});
+      } catch (error) {
+        await conn.rollback().catch(() => {});
+        throw error;
       }
-    });
+    } finally {
+      await conn.query('SELECT RELEASE_LOCK(?)', [`pos_auth_init_${ns}`]).catch(() => {});
+      conn.release();
+    }
   }
 
   async function authenticate(username, password, context = {}) {

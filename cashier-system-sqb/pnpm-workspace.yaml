@@ -1,3 +1,5 @@
 allowBuilds:
   electron-winstaller: true
   esbuild: true
+minimumReleaseAgeExclude:
+  - mysql2@3.24.6
