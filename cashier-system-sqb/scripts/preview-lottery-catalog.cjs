@@ -13,7 +13,7 @@ const { createCenterLottery } = require('../lottery-backend/center-lottery.cjs')
 const { createPhysicalCenter } = require('../lottery-backend/physical-center.cjs');
 const { createManagementHttp } = require('../lottery-backend/management-http.cjs');
 const baseline = require('../lottery-backend/config.js');
-const h5Root = path.resolve(__dirname, '../../小程序交付/Bubble-H5-1.0.3-qr0922');
+const h5Root = path.resolve(__dirname, '../../miniprogram/Bubble-H5-1.0.3-qr0922');
 const { createGateway } = require(path.join(h5Root, 'server/cloudfunctions/bubble-h5-gateway/gateway.cjs'));
 
 async function main() {

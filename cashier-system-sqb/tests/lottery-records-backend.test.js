@@ -10,7 +10,7 @@ import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
 const {createDrawRecords,createCloudRecordsReader}=require('../lottery-backend/draw-records.cjs');
 const {createManagementHttp}=require('../lottery-backend/management-http.cjs');
-const scarf=require('../../小程序交付/Bubble-H5-小红书头巾-50/server/cloudfunctions/bubble-scarf-gateway/management.cjs');
+const scarf=require('../../miniprogram/Bubble-H5-小红书头巾-50/server/cloudfunctions/bubble-scarf-gateway/management.cjs');
 const {createCouponStore}=require('../coupons/store.cjs');
 const {couponHttp}=require('../coupons/http.cjs');
 const key='a'.repeat(64),at=1791886000000,now=()=>at;

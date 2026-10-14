@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 const { createCouponStore } = require('../coupons/store.cjs');
 const { endpoints } = require('../coupons/http.cjs');
 const { createService: createPayments } = require('../payments/service.cjs');
-const h5Root = path.resolve(__dirname, '../../小程序交付/Bubble-H5-小红书头巾-50');
+const h5Root = path.resolve(__dirname, '../../miniprogram/Bubble-H5-小红书头巾-50');
 const backend = path.join(h5Root, 'server/cloudfunctions/bubble-scarf-gateway');
 
 function memoryStore() {

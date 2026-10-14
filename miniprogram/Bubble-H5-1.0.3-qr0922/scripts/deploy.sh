@@ -46,4 +46,5 @@ ssh "$SSH_TARGET" "mkdir -p '${REMOTE_DIR}'"
 scp -r dist/. "${SSH_TARGET}:${REMOTE_DIR}/"
 
 echo "==> Done. Reminder: ${DOMAIN} must serve the WeChat MP_verify_*.txt file at domain root,"
-echo "    and /api/bubble-h5/ must be proxied to the bubble-h5-gateway cloud function."
+echo "    and /huodong-api/bubble-h5/ must be proxied to the bubble-h5-gateway cloud function"
+echo "    (gateway env H5_API_BASE_PATH must be /huodong-api/bubble-h5 to match)."
