@@ -1,0 +1,1 @@
+<view wx:if="{{prize.kind==='cash'}}" class="cash"><text class="currency">¥</text><text class="amount">{{prize.amount}}</text></view><image wx:else class="product" src="/assets/{{prize.icon}}.svg" mode="aspectFit"/>

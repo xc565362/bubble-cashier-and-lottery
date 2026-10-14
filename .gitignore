@@ -6,10 +6,10 @@
 !/DEPLOYMENT.md
 !/VERIFICATION.md
 !/cashier-system-sqb/
-!/小程序交付/
-/小程序交付/*
-!/小程序交付/Bubble-H5-1.0.3-qr0922/
-!/小程序交付/Bubble-H5-小红书头巾-50/
+!/miniprogram/
+/miniprogram/*
+!/miniprogram/Bubble-H5-1.0.3-qr0922/
+!/miniprogram/Bubble-H5-小红书头巾-50/
 
 # Generated files and dependencies
 node_modules/

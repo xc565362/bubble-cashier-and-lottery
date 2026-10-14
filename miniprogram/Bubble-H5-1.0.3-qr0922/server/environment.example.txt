@@ -1,0 +1,20 @@
+# Only configure these in the NEW server-side cloud function. Never place them in H5 runtime-config.js.
+# Values below are intentionally empty or disabled. No actual credentials are included.
+H5_GATEWAY_ENABLED=0
+H5_BACKEND_REVIEWED=0
+H5_APP_ID=wx3cfec968f30fb6c1
+H5_APP_SECRET=
+# code2session requires AppSecret. cloud-ticket uses trusted native WXContext.
+H5_LOGIN_MODE=code2session
+# Required only for cloud-ticket; must exactly match an allowed H5 HTTPS origin.
+H5_TICKET_ORIGIN=https://h5.example.com
+H5_TOKEN_SECRET=
+H5_ALLOWED_ORIGINS=https://h5.example.com
+H5_API_BASE_PATH=/api/bubble-h5
+H5_MINIPROGRAM_ENTRY_PAGE=pages/bubble-h5/index
+LOTTERY_ADMIN_OPENIDS=
+CASHIER_CENTER_JSON=
+PHYSICAL_CENTER_JSON=
+# Server-only admin connection for the upgraded catalog center. Required for newly managed prizes.
+# Same verified coupon center used by cashier management; never put its adminToken in the H5 bundle.
+LOTTERY_MANAGEMENT_CENTER_JSON=

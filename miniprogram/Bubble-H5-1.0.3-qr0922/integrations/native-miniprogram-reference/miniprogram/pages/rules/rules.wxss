@@ -1,0 +1,3 @@
+.rule-section{margin:0 38rpx 33rpx;border:1rpx solid #e9bb98;border-radius:23rpx;padding:33rpx;background:#fff9e7}.rule-title{font-size:28rpx;font-weight:650;color:#69402d;margin-bottom:24rpx}.group{font-size:20rpx;color:#69402d;margin-top:25rpx}.prob-row{display:flex;justify-content:space-between;padding:20rpx 0;border-bottom:1rpx solid #e9bb98;font-size:23rpx;color:#69402d}.copy{font-size:23rpx;color:#69402d;line-height:2;margin-top:16rpx}.rule-section .secondary{margin-top:30rpx}.reset{color:#69402d;font-size:21rpx;margin-top:25rpx}
+
+.rule-section{background:#fff9e7}.rule-title{color:#a52d10}.group{color:#936140}.copy,.prob-row{color:#69402d}

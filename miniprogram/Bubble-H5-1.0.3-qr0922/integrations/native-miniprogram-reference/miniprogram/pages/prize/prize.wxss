@@ -1,0 +1,11 @@
+.ticket{margin:0 38rpx;background:#fff9e7;color:#69402d;border-radius:30rpx;overflow:hidden;text-align:center}.ticket-top{padding:42rpx 36rpx 40rpx;background:#fff9e7}.tag{font-size:20rpx;color:#69402d;background:#fff9e7;display:inline-block;padding:10rpx 20rpx;border-radius:35rpx}.prize-title{font-size:50rpx;font-weight:750;margin:10rpx 0 14rpx}.ticket-subtitle{font-size:18rpx;color:#69402d;letter-spacing:2rpx}.ticket-bottom{border-top:2rpx dashed #e9bb98;position:relative;padding:40rpx 35rpx}.ticket-bottom::before,.ticket-bottom::after{content:'';position:absolute;top:-18rpx;width:36rpx;height:36rpx;background:#fff9e7;border-radius:50%}.ticket-bottom::before{left:-18rpx}.ticket-bottom::after{right:-18rpx}.hint{font-size:20rpx;color:#69402d;line-height:1.8;margin-top:23rpx}.code{font-size:29rpx;font-family:Consolas,monospace;font-weight:700;letter-spacing:1rpx;color:#69402d;margin:22rpx -10rpx}.copy{font-size:21rpx;color:#69402d}.status{padding:48rpx 10rpx;font-size:44rpx;color:#69402d}.refresh{margin-top:30rpx}
+
+.ticket{background:#fff9e7;color:#582312}.ticket-top{background:#fff9e7}.tag{background:#ffe1b6;color:#9f2a11}.ticket-subtitle{color:#966044}.ticket-bottom{border-color:#d9ad88;padding-left:26rpx;padding-right:26rpx}.ticket-bottom::before,.ticket-bottom::after{background:#ff652e}.hint{color:#815237}.code{color:#241812;font-size:27rpx;letter-spacing:0}.copy,.status{color:#a52d10}
+.status{font-weight:800}
+.coupon-code{overflow-wrap:anywhere;word-break:break-all;font-size:23rpx;padding:0 10rpx;line-height:1.6}
+.code-modes{display:flex;width:248px;max-width:100%;height:44px;margin:0 auto 18px;border:1px solid #b95230;border-radius:6px;overflow:hidden;background:#fff9e7}
+.code-mode{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;height:42px;font-size:14px;font-weight:600;letter-spacing:0;color:#8b2d16}
+.code-mode+.code-mode{border-left:1px solid #b95230}
+.code-mode.active{background:#a52d10;color:#fff;font-weight:700}
+.code-display{display:flex;align-items:center;justify-content:center;width:100%;height:420rpx;max-height:280px;background:#fff}
+.code-display qr-code,.code-display barcode{display:block;width:100%;min-width:0}

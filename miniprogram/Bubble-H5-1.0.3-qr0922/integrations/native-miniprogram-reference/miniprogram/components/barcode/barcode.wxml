@@ -1,0 +1,1 @@
+<view class="barcode"><canvas id="barcode" type="2d" class="canvas" aria-label="奖品核销条形码"/><view wx:if="{{error}}" class="error">{{error}}</view></view>

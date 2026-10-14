@@ -1,0 +1,4 @@
+<view class="qr-wrap">
+  <canvas type="2d" id="qr" class="qr" binderror="onCanvasError"/>
+  <view wx:if="{{error}}" class="qr-error">{{error}}</view>
+</view>

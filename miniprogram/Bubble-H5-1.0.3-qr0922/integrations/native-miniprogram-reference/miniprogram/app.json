@@ -1,0 +1,23 @@
+{
+  "pages": [
+    "pages/home/home",
+    "pages/prize/prize",
+    "pages/rules/rules",
+    "pages/staff/staff"
+  ],
+  "window": {
+    "navigationBarTitleText": "赛场同行",
+    "navigationBarBackgroundColor": "#fff9e7",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#ff652e",
+    "backgroundTextStyle": "dark"
+  },
+  "usingComponents": {
+    "brand-header": "/components/brand-header/brand-header",
+    "bottom-nav": "/components/bottom-nav/bottom-nav",
+    "prize-art": "/components/prize-art/prize-art",
+    "barcode": "/components/barcode/barcode"
+  },
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}
