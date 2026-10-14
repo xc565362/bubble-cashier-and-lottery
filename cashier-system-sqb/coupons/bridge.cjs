@@ -2,11 +2,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { endpoints } = require('./http.cjs');
-const { createCouponStore } = require('./store.cjs');
-const { digest } = require('./store.cjs');
+const { createCouponStore, digest } = require('./store.cjs');
+const { createPool } = require('../online/mysql.cjs');
 const { selectors, resolvePhysicalProduct, resolveCatalogProduct, validatePhysicalLine } = require('./physical-products.cjs');
 
-function createCouponBridge({ directory, protect = value => value, unprotect = value => value, fetchFn = fetch, getPayment = () => null }) {
+function createCouponBridge({ directory, protect = value => value, unprotect = value => value, fetchFn = fetch, getPayment = () => null, storeNs = '' }) {
   const configFile = path.join(directory, 'coupon-connection.json');
   const stateFile = path.join(directory, 'coupon-transactions.json');
   const bindingFile = path.join(directory, 'physical-product-bindings.json');
@@ -21,16 +21,21 @@ function createCouponBridge({ directory, protect = value => value, unprotect = v
   let config = read(configFile, { mode: 'local', deviceId: crypto.randomUUID() });
   let journal = read(stateFile, {});
   let bindings = read(bindingFile, {version:1,prizes:{}});
-  let local;
+  let localPromise;
   let busy = false;
-  const store = () => local ||= createCouponStore({ file: path.join(directory, 'coupon-development', 'coupons.sqlite') });
+  // Local development coupon center now lives in the same MySQL (pos_coupon_*
+  // tables, default namespace) instead of a per-machine SQLite file.
+  const store = () => localPromise ||= (async () => {
+    const pool = createPool();
+    return { store: await createCouponStore({ pool, ns: storeNs }), pool };
+  })();
   function saveJournal() { write(stateFile, journal); }
   function pendingSnapshot() {
     return structuredClone(Object.values(journal).filter(row => !row.finished).map(row => ({ ...row,
       canRelease: !row.zeroDraft && (!row.orderId || !getPayment(row.orderId) || ['failed', 'not-started'].includes(getPayment(row.orderId).state)) })));
   }
   async function request(action, input = {}, cashier = false, target = config) {
-    if (target.mode === 'local') return store().dispatch({ id: cashier ? config.deviceId : 'administrator', role: cashier ? 'cashier' : 'admin' }, action, input);
+    if (target.mode === 'local') return (await store()).store.dispatch({ id: cashier ? config.deviceId : 'administrator', role: cashier ? 'cashier' : 'admin' }, action, input);
     const [method, route] = endpoints[action] || [];
     if (!method) throw new Error('不支持的券服务操作');
     const url = new URL(route, target.baseUrl);
@@ -232,7 +237,7 @@ function createCouponBridge({ directory, protect = value => value, unprotect = v
     settle,
     // Internal recovery evidence; never a browser dispatch action.
     readOnlineState: () => structuredClone(Object.values(journal)),
-    close: () => local?.close(),
+    close: () => localPromise?.then(({ pool }) => pool.end()),
     hasPending: () => Object.values(journal).some(row => !row.finished),
     hasZeroPending: () => Object.values(journal).some(row => !row.finished && row.zeroDraft),
   };

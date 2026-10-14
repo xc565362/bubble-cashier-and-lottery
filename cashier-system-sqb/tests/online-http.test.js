@@ -8,10 +8,12 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { createOnlineHandler } = require('../online/http.cjs');
 const { createAuthStore } = require('../online/auth.cjs');
+const { createPosFixture } = require('./helpers/posfixture.cjs');
 
 async function fixture(t, { leaseDenied = false } = {}) {
+  const pos = await createPosFixture(t);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bubble-online-http-'));
-  const auth = createAuthStore({ file: path.join(dir, 'accounts.sqlite') });
+  const auth = createAuthStore({ pool: pos.pool, ns: pos.ns });
   const admin = await auth.createInitialAdmin({ username: 'owner', password: 'fixture-admin-password', displayName: '测试管理员' });
   const staff = await auth.createUser({ username: 'staff', password: 'fixture-staff-password', displayName: '测试收银员', role: 'cashier' }, admin);
   fs.mkdirSync(path.join(dir, 'dist')); fs.writeFileSync(path.join(dir, 'dist/index.html'), '<h1>Login</h1>');

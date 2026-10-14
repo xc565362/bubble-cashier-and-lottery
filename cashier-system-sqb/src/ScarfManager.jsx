@@ -8,6 +8,7 @@ import { ActivityRulesEditor } from './ActivityRulesEditor.jsx';
 import { RULES_TEXT_CAPABILITY } from './rulesText.js';
 import { LotteryRecords } from './LotteryRecords.jsx';
 import { DRAW_RECORDS_CAPABILITY } from './lotteryRecords.js';
+import { LotteryLocal } from './LotteryLocal.jsx';
 import './lottery.css';
 import './scarf.css';
 
@@ -18,12 +19,23 @@ const dateText = value => value ? new Date(value).toLocaleString('zh-CN', { hour
 export function LotteryWorkspace({ products, onCashier }) {
   const [selected, setSelected] = useState('original');
   const [visited, setVisited] = useState(false);
+  // Prefer the self-hosted lottery server once it is configured; the cloud
+  // management views stay available under their own tabs.
+  const touched = useRef(false);
+  useEffect(() => {
+    let live = true;
+    sqbCall('h5lottery-config').then(info => { if (live && info.configured && !touched.current) setSelected('local'); }).catch(() => {});
+    return () => { live = false; };
+  }, []);
+  const choose = value => { touched.current = true; if (value === 'scarf') setVisited(true); setSelected(value); };
   return <div className="lotteryWorkspace">
     <p className="lotteryHelp">选择活动分别管理奖品、名额和概率；两个活动的中奖凭证都在「收银」核销。</p>
     <div className="lotteryCampaignTabs" role="group" aria-label="选择抽奖活动">
-      <button type="button" aria-pressed={selected === 'original'} onClick={() => setSelected('original')}><Dices size={17} /> 此刻在地</button>
-      <button type="button" aria-pressed={selected === 'scarf'} onClick={() => { setVisited(true); setSelected('scarf'); }}><Gift size={17} /> 山野有约 · 关注抽头巾</button>
+      <button type="button" aria-pressed={selected === 'local'} onClick={() => choose('local')}><Dices size={17} /> 此刻在地 · 自托管服务</button>
+      <button type="button" aria-pressed={selected === 'original'} onClick={() => choose('original')}><Dices size={17} /> 此刻在地</button>
+      <button type="button" aria-pressed={selected === 'scarf'} onClick={() => choose('scarf')}><Gift size={17} /> 山野有约 · 关注抽头巾</button>
     </div>
+    <div hidden={selected !== 'local'}><LotteryLocal /></div>
     <div hidden={selected !== 'original'}><LotteryManager products={products} onCashier={onCashier} /></div>
     {visited && <div hidden={selected !== 'scarf'}><ScarfManager products={products} onCashier={onCashier} /></div>}
   </div>;

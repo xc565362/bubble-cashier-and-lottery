@@ -83,7 +83,7 @@ function createOnlineHandler({ auth, ledger, service, publicOrigin, staticRoot, 
       sqb = route.startsWith('/api/sqb/');
       if (req.method === 'GET' && route === '/healthz') return send(res, { ok: true, service: 'bubble-online-cashier' });
       if (setup && req.method === 'GET' && ['/setup', '/cashier/setup', '/api/online/setup-client.js'].includes(route)) {
-        if (!setup.setupEnabled()) throw problem('SETUP_DISABLED', '管理员已设置或初始化链接已过期', 404);
+        if (!(await setup.setupEnabled())) throw problem('SETUP_DISABLED', '管理员已设置或初始化链接已过期', 404);
         const page = require('./setup-page.cjs'), isScript = route.endsWith('.js');
         res.setHeader('Content-Type', isScript ? 'application/javascript; charset=utf-8' : 'text/html; charset=utf-8');
         res.end(isScript ? page.script : page.html); return;

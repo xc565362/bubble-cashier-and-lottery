@@ -7,6 +7,8 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { memoryStore } = require('./scarf-cashier-fixture.cjs');
 const { createCouponStore } = require('../coupons/store.cjs');
+const { createPool, ensureSchema } = require('../online/mysql.cjs');
+const { deleteNamespace } = require('../online/mysql.cjs');
 const { endpoints } = require('../coupons/http.cjs');
 const { createService: createPayments } = require('../payments/service.cjs');
 const { createService: createOriginalService } = require('../lottery-backend/service.js');
@@ -25,11 +27,14 @@ async function createFixture({ randomIndex = limit => crypto.randomInt(limit), r
   const { createScarfCenter } = require(path.join(scarfBackend, 'center.cjs'));
   const { createManagementHttp: createScarfManagement, createManagementService } = require(path.join(scarfBackend, 'management.cjs'));
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bubble-dual-lottery-'));
-  const couponStore = createCouponStore({ file: path.join(directory, 'isolated-coupons.sqlite'), environment: 'production', now });
+  const pool = createPool();
+  await ensureSchema(pool);
+  const ns = 'fixture-' + crypto.randomBytes(6).toString('hex');
+  const couponStore = await createCouponStore({ pool, ns, environment: 'production', now });
   const admin = { id: 'administrator', role: 'admin' };
   const adminToken = crypto.randomBytes(32).toString('hex');
   const originalKey = crypto.randomBytes(32).toString('hex'), scarfKey = crypto.randomBytes(32).toString('hex');
-  const centerId = couponStore.dispatch(admin, 'info').centerId;
+  const centerId = (await couponStore.dispatch(admin, 'info')).centerId;
   const baseUrl = 'https://dual-coupons.invalid';
   const originalManagementUrl = 'https://dual-original-management.invalid/lottery';
   const scarfManagementUrl = 'https://dual-scarf-management.invalid/api/scarf-management';
@@ -42,12 +47,12 @@ async function createFixture({ randomIndex = limit => crypto.randomInt(limit), r
       try {
         const headers = new Headers(options.headers || {});
         const supplied = headers.get('authorization')?.replace(/^Bearer /, '');
-        const actor = supplied === adminToken ? admin : couponStore.authenticate(supplied);
+        const actor = supplied === adminToken ? admin : await couponStore.authenticate(supplied);
         const action = Object.entries(endpoints).find(([, [method, route]]) => method === (options.method || 'GET') && route === parsed.pathname)?.[0];
         if (!action) throw new Error('Unexpected isolated coupon route');
         const input = options.body ? JSON.parse(options.body) : Object.fromEntries(parsed.searchParams);
         if (!options.body && input.page) input.page = Number(input.page);
-        return Response.json({ ok: true, data: couponStore.dispatch(actor, action, input) });
+        return Response.json({ ok: true, data: await couponStore.dispatch(actor, action, input) });
       } catch (error) { return Response.json({ ok: false, code: error.code, error: error.message }, { status: error.status || 400 }); }
     }
     const handler = parsed.href === originalManagementUrl ? originalManagement : parsed.href === scarfManagementUrl ? scarfManagement : null;
@@ -74,11 +79,11 @@ async function createFixture({ randomIndex = limit => crypto.randomInt(limit), r
     const physicalConfig = { baseUrl, centerId, environment: 'production', stage: 'active', handoffReadyAt: now() - 1000, prizes: {} };
     const catalogCenterConfig = { baseUrl, centerId, environment: 'production', adminToken, prizes: {} };
     for (const p of prizes) {
-      const couponCampaign = couponStore.dispatch(admin, 'create-campaign', { requestId: 'dual-original-campaign-' + p.id, name: '此刻在地 · ' + p.name, kind: p.kind,
+      const couponCampaign = await couponStore.dispatch(admin, 'create-campaign', { requestId: 'dual-original-campaign-' + p.id, name: '此刻在地 · ' + p.name, kind: p.kind,
         amountCents: Math.round((p.amount || 0) * 100), minimumCents: 0, quota: campaign.inventory.quantities[p.id],
         startsAt: new Date(campaign.startsAt).toISOString(), expiresAt: new Date(campaign.redeemEndsAt).toISOString(),
         ...(p.kind === 'physical' ? { physical: { prizeId: p.id, quantity: 1 } } : {}) });
-      const credential = couponStore.dispatch(admin, 'create-key', { requestId: 'dual-original-key-' + p.id, name: 'Isolated ' + p.id, role: 'lottery', campaignId: couponCampaign.id });
+      const credential = await couponStore.dispatch(admin, 'create-key', { requestId: 'dual-original-key-' + p.id, name: 'Isolated ' + p.id, role: 'lottery', campaignId: couponCampaign.id });
       (p.kind === 'physical' ? physicalConfig : centerConfig).prizes[p.id] = { campaignId: couponCampaign.id, token: credential.token, minimumCents: 0 };
       catalogCenterConfig.prizes[p.id] = couponCampaign.id;
     }
@@ -138,10 +143,10 @@ async function createFixture({ randomIndex = limit => crypto.randomInt(limit), r
         return '/' + kind + '/#/home?wx_code=' + code + (invitation ? '&inviteCode=' + invitation.inviteCode : '');
       } };
     }
-    return { directory, couponStore, admin, payments, products, centerId, mockFetch, counters, now, createGateways,
+    return { directory, couponStore, admin, payments, products, centerId, mockFetch, counters, now, createGateways, pool, ns,
       original: { call: originalCall, store: originalStore, campaign, prizes, h5Root: originalH5Root },
       scarf: { call: scarfCall, manage: scarfManage, store: scarfStore, campaignId: CAMPAIGN_ID, h5Root: scarfH5Root },
-      close() { if (closed) return; closed = true; payments.close(); couponStore.close(); } };
-  } catch (error) { payments?.close(); couponStore.close(); throw error; }
+      async close() { if (closed) return; closed = true; payments.close(); couponStore.close(); await deleteNamespace(pool, ns); await pool.end(); } };
+  } catch (error) { payments?.close(); couponStore.close(); await pool.end().catch(() => {}); throw error; }
 }
 module.exports = { createFixture, STAFF, VISITOR, originalH5Root, scarfH5Root };

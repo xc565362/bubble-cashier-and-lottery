@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { createCouponStore } = require('../coupons/store.cjs');
+const { createPool, ensureSchema, deleteNamespace } = require('../online/mysql.cjs');
 const { endpoints } = require('../coupons/http.cjs');
 const { createService: createPayments } = require('../payments/service.cjs');
 const { paymentMiddleware } = require('../payments/http.cjs');
@@ -18,11 +19,14 @@ const { createGateway } = require(path.join(h5Root, 'server/cloudfunctions/bubbl
 
 async function main() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bubble-catalog-preview-'));
-  const couponStore = createCouponStore({ file: path.join(directory, 'isolated-coupons.sqlite'), environment: 'production' });
+  const pool = createPool();
+  await ensureSchema(pool);
+  const ns = 'preview-' + crypto.randomBytes(6).toString('hex');
+  const couponStore = await createCouponStore({ pool, ns, environment: 'production' });
   const admin = { id: 'administrator', role: 'admin' };
   const adminToken = crypto.randomBytes(32).toString('hex');
   const managementKey = crypto.randomBytes(32).toString('hex');
-  const centerId = couponStore.dispatch(admin, 'info').centerId;
+  const centerId = (await couponStore.dispatch(admin, 'info')).centerId;
   const now = Date.now;
   const campaign = { ...structuredClone(baseline.campaign), title: '赛场同行 · 隔离联动演示', enabled: false,
     startsAt: now() - 60000, endsAt: now() + 7 * 86400000, redeemEndsAt: now() + 7 * 86400000, redemptionEndsAt: undefined };
@@ -38,11 +42,11 @@ async function main() {
   const physicalConfig = { ...centerConfig, stage: 'active', handoffReadyAt: now() - 1000, prizes: {} };
   const managementCenterConfig = { baseUrl: centerConfig.baseUrl, centerId, adminToken, prizes: {} };
   for (const p of prizes) {
-    const c = couponStore.dispatch(admin, 'create-campaign', { requestId: 'preview-campaign-' + p.id, name: p.name, kind: p.kind,
+    const c = await couponStore.dispatch(admin, 'create-campaign', { requestId: 'preview-campaign-' + p.id, name: p.name, kind: p.kind,
       amountCents: Math.round((p.amount || 0) * 100), minimumCents: 0, quota: campaign.inventory.quantities[p.id],
       startsAt: new Date(campaign.startsAt).toISOString(), expiresAt: new Date(campaign.redeemEndsAt).toISOString(),
       ...(p.kind === 'physical' ? { physical: { prizeId: p.id, quantity: 1 } } : {}) });
-    const key = couponStore.dispatch(admin, 'create-key', { requestId: 'preview-key-' + p.id, name: 'Preview ' + p.id, role: 'lottery', campaignId: c.id });
+    const key = await couponStore.dispatch(admin, 'create-key', { requestId: 'preview-key-' + p.id, name: 'Preview ' + p.id, role: 'lottery', campaignId: c.id });
     const mapping = { campaignId: c.id, token: key.token, minimumCents: 0 };
     (p.kind === 'physical' ? physicalConfig : centerConfig).prizes[p.id] = mapping;
     managementCenterConfig.prizes[p.id] = c.id;
@@ -52,10 +56,10 @@ async function main() {
     if (parsed.origin === centerConfig.baseUrl) {
       try {
         const token = options.headers?.Authorization?.replace(/^Bearer /, '');
-        const actor = token === adminToken ? admin : couponStore.authenticate(token);
+        const actor = token === adminToken ? admin : await couponStore.authenticate(token);
         const action = Object.entries(endpoints).find(([, [method, route]]) => method === (options.method || 'GET') && route === parsed.pathname)?.[0];
         if (!action) throw new Error('Unexpected fixture coupon route');
-        const data = couponStore.dispatch(actor, action, options.body ? JSON.parse(options.body) : Object.fromEntries(parsed.searchParams));
+        const data = await couponStore.dispatch(actor, action, options.body ? JSON.parse(options.body) : Object.fromEntries(parsed.searchParams));
         return Response.json({ ok: true, data });
       } catch (error) { return Response.json({ ok: false, error: error.message, code: error.code }, { status: error.status || 400 }); }
     }
@@ -135,6 +139,6 @@ async function main() {
     res.setHeader('Content-Type', type); res.end(req.method === 'HEAD' ? undefined : bytes);
   });
   server.listen(port, '127.0.0.1', () => console.log('Isolated cashier + H5 preview: ' + origin + '/ (no production connections)'));
-  process.on('SIGINT', () => { server.closeAllConnections(); server.close(); payments.close(); couponStore.close(); process.exit(0); });
+  process.on('SIGINT', () => { server.closeAllConnections(); server.close(); payments.close(); couponStore.close(); deleteNamespace(pool, ns).finally(() => pool.end().finally(() => process.exit(0))); });
 }
 main().catch(error => { console.error(error.message); process.exitCode = 1; });

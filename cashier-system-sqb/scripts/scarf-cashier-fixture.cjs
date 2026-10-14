@@ -4,6 +4,8 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { createCouponStore } = require('../coupons/store.cjs');
+const { createPool, ensureSchema } = require('../online/mysql.cjs');
+const { deleteNamespace } = require('../online/mysql.cjs');
 const { endpoints } = require('../coupons/http.cjs');
 const { createService: createPayments } = require('../payments/service.cjs');
 const h5Root = path.resolve(__dirname, '../../miniprogram/Bubble-H5-小红书头巾-50');
@@ -41,10 +43,13 @@ async function createFixture({ randomBps = () => crypto.randomInt(10000), now = 
   const { createScarfCenter } = require(path.join(backend, 'center.cjs'));
   const { createManagementHttp, createManagementService } = require(path.join(backend, 'management.cjs'));
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bubble-scarf-cashier-'));
-  const couponStore = createCouponStore({ file: path.join(directory, 'isolated-coupons.sqlite'), environment: 'production' });
+  const pool = createPool();
+  await ensureSchema(pool);
+  const ns = 'fixture-' + crypto.randomBytes(6).toString('hex');
+  const couponStore = await createCouponStore({ pool, ns, environment: 'production' });
   const admin = { id: 'administrator', role: 'admin' };
   const token = crypto.randomBytes(32).toString('hex'), key = crypto.randomBytes(32).toString('hex');
-  const info = couponStore.dispatch(admin, 'info');
+  const info = await couponStore.dispatch(admin, 'info');
   const store = memoryStore();
   store.seed(COLLECTIONS.campaigns, CAMPAIGN_ID, { enabled: false, startsAt: null, endsAt: null, redeemEndsAt: null });
   store.seed(COLLECTIONS.inventory, CAMPAIGN_ID, { total: 200, remaining: 200, awarded: 0, redeemed: 0 });
@@ -59,12 +64,12 @@ async function createFixture({ randomBps = () => crypto.randomInt(10000), now = 
     if (parsed.origin === baseUrl) {
       try {
         const supplied = options.headers?.Authorization?.replace(/^Bearer /, '');
-        const actor = supplied === token ? admin : couponStore.authenticate(supplied);
+        const actor = supplied === token ? admin : await couponStore.authenticate(supplied);
         const action = Object.entries(endpoints).find(([, [method, route]]) => method === (options.method || 'GET') && route === parsed.pathname)?.[0];
         if (!action) throw new Error('Unexpected isolated coupon route');
         const input = options.body ? JSON.parse(options.body) : Object.fromEntries(parsed.searchParams);
         if (!options.body && input.page) input.page = Number(input.page);
-        const data = couponStore.dispatch(actor, action, input);
+        const data = await couponStore.dispatch(actor, action, input);
         return Response.json({ ok: true, data });
       } catch (error) { return Response.json({ ok: false, code: error.code, error: error.message }, { status: error.status || 400 }); }
     }
@@ -88,8 +93,8 @@ async function createFixture({ randomBps = () => crypto.randomInt(10000), now = 
   await manage('update', { operation: 'resume', revision: configured.revision, requestId: crypto.randomUUID(), reason: '启动本机隔离演示' });
   await payments.dispatch('coupon-connect', { baseUrl, adminToken: token });
   await payments.dispatch('scarf-connect', { url: managementUrl, campaignId: CAMPAIGN_ID, key });
-  return { directory, store, couponStore, admin, call, manage, payments, products, h5Root, backend, now,
-    close() { payments.close(); couponStore.close(); },
+  return { directory, store, couponStore, admin, call, manage, payments, products, h5Root, backend, now, pool, ns,
+    async close() { payments.close(); couponStore.close(); await deleteNamespace(pool, ns); await pool.end(); },
   };
 }
 module.exports = { createFixture, memoryStore, h5Root, backend };

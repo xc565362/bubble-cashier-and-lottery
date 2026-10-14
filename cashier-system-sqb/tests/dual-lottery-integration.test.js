@@ -174,7 +174,7 @@ test('original physical prize, original cash coupon and scarf prize all redeem o
   assert.equal(original.allocated, 2); assert.equal(original.remaining, 498);
   assert.equal(original.center.prizes.cap.redeemed, 1); assert.equal(original.center.prizes.cash50.redeemed, 1);
   assert.equal(scarfAfter.inventory.awarded, 1); assert.equal(scarfAfter.inventory.redeemed, 1); assert.equal(scarfAfter.inventory.remaining, 199);
-  assert.equal(f.couponStore.dispatch(f.admin, 'coupons', {}).total, 3);
+  assert.equal((await f.couponStore.dispatch(f.admin, 'coupons', {})).total, 3);
 });
 
 test('a persisted scarf loss does not consume the same participant eligibility or stock in the original activity', async t => {
@@ -186,7 +186,7 @@ test('a persisted scarf loss does not consume the same participant eligibility o
   assert.equal(original.prize.id, 'cap');
   assert.equal((await f.scarf.call('state', {}, VISITOR)).inventory.remaining, 200);
   assert.equal((await f.payments.dispatch('lottery-snapshot')).remaining, 499);
-  assert.equal(f.couponStore.dispatch(f.admin, 'coupons', {}).total, 1);
+  assert.equal((await f.couponStore.dispatch(f.admin, 'coupons', {})).total, 1);
 });
 
 test('independent H5 sessions and fresh participant entries keep both gateways isolated', async t => {

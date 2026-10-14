@@ -5,7 +5,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
-import {DatabaseSync} from 'node:sqlite';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
 const {createDrawRecords,createCloudRecordsReader}=require('../lottery-backend/draw-records.cjs');
@@ -13,6 +12,7 @@ const {createManagementHttp}=require('../lottery-backend/management-http.cjs');
 const scarf=require('../../miniprogram/Bubble-H5-小红书头巾-50/server/cloudfunctions/bubble-scarf-gateway/management.cjs');
 const {createCouponStore}=require('../coupons/store.cjs');
 const {couponHttp}=require('../coupons/http.cjs');
+const {createPosFixture}=require('./helpers/posfixture.cjs');
 const key='a'.repeat(64),at=1791886000000,now=()=>at;
 const id=n=>n.toString(16).padStart(32,'0');
 const centerIdentity={centerId:'center-fixture',environment:'production'};
@@ -112,49 +112,61 @@ for(const type of ['original','scarf'])test(type+' management records require si
   const event=signed(campaignId),result=await call(event);assert.equal(result.statusCode,200);assert.equal(JSON.parse(result.body).data.items.length,1);assert.equal(reads,1);assert.equal(writes.length,1);assert.match(writes[0][0],/gatewayNonces|bubble_scarf_management/);
   assert.ok([400,409].includes((await call(event)).statusCode));assert.equal(reads,1);assert.equal(writes.length,1);
 });
-function couponFixture(t) {
-  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'lottery-record-status-')),file=path.join(directory,'center.sqlite');let clock=at;
-  const store=createCouponStore({file,now:()=>clock}),admin={id:'admin',role:'admin'},call=(action,input={})=>store.dispatch(admin,action,{requestId:crypto.randomUUID(),...input});
+async function couponFixture(t) {
+  const pos = await createPosFixture(t);
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'lottery-record-status-'));let clock=at;
+  const store=await createCouponStore({pool:pos.pool,ns:pos.ns,now:()=>clock}),admin={id:'admin',role:'admin'},call=(action,input={})=>store.dispatch(admin,action,{requestId:crypto.randomUUID(),...input});
   t.after(()=>{store.close();fs.rmSync(directory,{recursive:true,force:true});});
-  const campaign=call('create-campaign',{name:'Fixture cash',amountCents:500,minimumCents:0,quota:10,startsAt:new Date(at-1000).toISOString(),expiresAt:new Date(at+3600000).toISOString()});
+  const campaign=await call('create-campaign',{name:'Fixture cash',amountCents:500,minimumCents:0,quota:10,startsAt:new Date(at-1000).toISOString(),expiresAt:new Date(at+3600000).toISOString()});
   const actor={id:'fixture-lottery',role:'lottery',campaignId:campaign.id};
-  const coupon=store.dispatch(actor,'issue',{requestId:crypto.randomUUID(),campaignId:campaign.id,owner:'fixture-owner',awardId:'fixture-award'});
+  const coupon=await store.dispatch(actor,'issue',{requestId:crypto.randomUUID(),campaignId:campaign.id,owner:'fixture-owner',awardId:'fixture-award'});
   const input={centerId:store.identity.id,environment:store.identity.environment,refs:[{recordId:id(1),campaignId:campaign.id,owner:'fixture-owner',awardId:'fixture-award',couponId:coupon.id}]};
-  return {directory,file,store,admin,campaign,coupon,input,call,advance:ms=>{clock+=ms;},read:input2=>store.dispatch(admin,'lottery-record-status',input2||input)};
+  return {...pos,directory,store,admin,campaign,coupon,input,call,advance:ms=>{clock+=ms;},read:input2=>store.dispatch(admin,'lottery-record-status',input2||input)};
 }
-function fileHashes(f) {return Object.fromEntries([f.file,f.file+'-wal'].filter(name=>fs.existsSync(name)).map(name=>[name,crypto.createHash('sha256').update(fs.readFileSync(name)).digest('hex')]));}
-test('sanitized coupon batch status performs zero DB/WAL writes, creates no tokens or expiry events',t=>{
-  const f=couponFixture(t),before=fileHashes(f);f.advance(7200000);
-  const result=f.read();assert.equal(result.items[0].state,'EXPIRED');assert.equal(result.items[0].result,'verified');assert.deepEqual(fileHashes(f),before);
+// The SQLite suite hashed the db+wal files to prove zero writes. With MySQL we
+// hash the namespace's rows instead: identical content means identical state.
+async function dbSnapshot(f) {
+  const dump={};
+  for(const table of ['pos_coupons','pos_coupon_campaigns','pos_coupon_tokens','pos_coupon_operations','pos_coupon_events','pos_coupon_api_keys','pos_coupon_meta']){
+    const [rows]=await f.pool.query(`SELECT * FROM ${table} WHERE ns = ? ORDER BY 1, 2`,[f.ns]);
+    dump[table]=rows;
+  }
+  return crypto.createHash('sha256').update(JSON.stringify(dump)).digest('hex');
+}
+test('sanitized coupon batch status performs zero DB writes, creates no tokens or expiry events',async t=>{
+  const f=await couponFixture(t),before=await dbSnapshot(f);f.advance(7200000);
+  const result=await f.read();assert.equal(result.items[0].state,'EXPIRED');assert.equal(result.items[0].result,'verified');assert.equal(await dbSnapshot(f),before);
   assert.ok(!JSON.stringify(result).includes(f.coupon.code));assert.ok(!JSON.stringify(result).includes('fixture-owner'));
-  const db=new DatabaseSync(f.file,{readOnly:true});try{assert.equal(JSON.parse(db.prepare('SELECT data FROM coupons WHERE id=?').get(f.coupon.id).data).state,'AVAILABLE');}finally{db.close();}
+  const [rows]=await f.pool.query('SELECT data FROM pos_coupons WHERE ns = ? AND id = ?',[f.ns,f.coupon.id]);
+  const stored=typeof rows[0].data==='string'?JSON.parse(rows[0].data):rows[0].data;
+  assert.equal(stored.state,'AVAILABLE');
 });
-test('batch status finds persisted issuance by immutable binding without creating it and rejects wrong binding',t=>{
-  const f=couponFixture(t),ref={...f.input.refs[0]};delete ref.couponId;
-  assert.equal(f.read({...f.input,refs:[ref]}).items[0].couponId,f.coupon.id);
-  assert.equal(f.read({...f.input,refs:[{...ref,awardId:'missing'}]}).items[0].result,'not_found');
-  assert.equal(f.read({...f.input,refs:[{...f.input.refs[0],owner:'wrong'}]}).items[0].result,'mismatch');
-  assert.throws(()=>f.read({...f.input,centerId:'wrong'}),{code:'CENTER_MISMATCH'});
+test('batch status finds persisted issuance by immutable binding without creating it and rejects wrong binding',async t=>{
+  const f=await couponFixture(t),ref={...f.input.refs[0]};delete ref.couponId;
+  assert.equal((await f.read({...f.input,refs:[ref]})).items[0].couponId,f.coupon.id);
+  assert.equal((await f.read({...f.input,refs:[{...ref,awardId:'missing'}]})).items[0].result,'not_found');
+  assert.equal((await f.read({...f.input,refs:[{...f.input.refs[0],owner:'wrong'}]})).items[0].result,'mismatch');
+  await assert.rejects(f.read({...f.input,centerId:'wrong'}),{code:'CENTER_MISMATCH'});
 });
-test('batch status enforces admin scope, strict bounds, duplicates and injection-safe identifiers',t=>{
-  const f=couponFixture(t),before=fileHashes(f);
-  for(const role of ['cashier','lottery'])assert.throws(()=>f.store.dispatch({id:'other',role},'lottery-record-status',f.input),{code:'FORBIDDEN'});
-  for(const refs of [[],Array(51).fill(f.input.refs[0]),[f.input.refs[0],f.input.refs[0]],[{...f.input.refs[0],owner:"'; DROP TABLE coupons; --"}],[{...f.input.refs[0],code:f.coupon.code}],[{...f.input.refs[0],couponId:[]}]] ) assert.throws(()=>f.read({...f.input,refs}),{code:'INVALID_INPUT'});
-  assert.deepEqual(fileHashes(f),before);
+test('batch status enforces admin scope, strict bounds, duplicates and injection-safe identifiers',async t=>{
+  const f=await couponFixture(t),before=await dbSnapshot(f);
+  for(const role of ['cashier','lottery'])await assert.rejects(f.store.dispatch({id:'other',role},'lottery-record-status',f.input),{code:'FORBIDDEN'});
+  for(const refs of [[],Array(51).fill(f.input.refs[0]),[f.input.refs[0],f.input.refs[0]],[{...f.input.refs[0],owner:"'; DROP TABLE coupons; --"}],[{...f.input.refs[0],code:f.coupon.code}],[{...f.input.refs[0],couponId:[]}]] ) await assert.rejects(f.read({...f.input,refs}),{code:'INVALID_INPUT'});
+  assert.equal(await dbSnapshot(f),before);
 });
-test('batch status keeps payment-pending state beyond expiry, releases expired reservation virtually',t=>{
-  const f=couponFixture(t),actor={id:'cashier',role:'cashier'};
-  const reserved=f.store.dispatch(actor,'reserve',{requestId:crypto.randomUUID(),code:f.coupon.code,eligibleCents:1000,checkoutId:'fixture-checkout'});
-  f.advance(16*60000);const before=fileHashes(f);assert.equal(f.read().items[0].state,'AVAILABLE');assert.deepEqual(fileHashes(f),before);
-  const reserved2=f.store.dispatch(actor,'reserve',{requestId:crypto.randomUUID(),code:f.coupon.code,eligibleCents:1000,checkoutId:'fixture-checkout-2'});
-  f.store.dispatch(actor,'prepare',{requestId:crypto.randomUUID(),id:reserved2.reservation.id,orderId:'fixture-order',orderNo:'F-1',eligibleCents:1000,paidCents:500});
-  f.advance(7200000);const pending=fileHashes(f);assert.equal(f.read().items[0].state,'PAYMENT_PENDING');assert.deepEqual(fileHashes(f),pending);assert.ok(reserved.reservation.id);
+test('batch status keeps payment-pending state beyond expiry, releases expired reservation virtually',async t=>{
+  const f=await couponFixture(t),actor={id:'cashier',role:'cashier'};
+  const reserved=await f.store.dispatch(actor,'reserve',{requestId:crypto.randomUUID(),code:f.coupon.code,eligibleCents:1000,checkoutId:'fixture-checkout'});
+  f.advance(16*60000);const before=await dbSnapshot(f);assert.equal((await f.read()).items[0].state,'AVAILABLE');assert.equal(await dbSnapshot(f),before);
+  const reserved2=await f.store.dispatch(actor,'reserve',{requestId:crypto.randomUUID(),code:f.coupon.code,eligibleCents:1000,checkoutId:'fixture-checkout-2'});
+  await f.store.dispatch(actor,'prepare',{requestId:crypto.randomUUID(),id:reserved2.reservation.id,orderId:'fixture-order',orderNo:'F-1',eligibleCents:1000,paidCents:500});
+  f.advance(7200000);const pending=await dbSnapshot(f);assert.equal((await f.read()).items[0].state,'PAYMENT_PENDING');assert.equal(await dbSnapshot(f),pending);assert.ok(reserved.reservation.id);
 });
 test('batch HTTP endpoint rejects unauthenticated or browser-origin calls before dispatch',async t=>{
-  const f=couponFixture(t),adminToken='test-admin-token-'+crypto.randomBytes(20).toString('hex'),handler=couponHttp(f.store,{adminToken});
+  const f=await couponFixture(t),adminToken='test-admin-token-'+crypto.randomBytes(20).toString('hex'),handler=couponHttp(f.store,{adminToken});
   const server=http.createServer(handler);await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
-  const url='http://127.0.0.1:'+server.address().port+'/v1/lottery/records/status',base={method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(f.input)},before=fileHashes(f);
+  const url='http://127.0.0.1:'+server.address().port+'/v1/lottery/records/status',base={method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(f.input)},before=await dbSnapshot(f);
   assert.equal((await fetch(url,base)).status,401);
   assert.equal((await fetch(url,{...base,headers:{...base.headers,authorization:'Bearer '+adminToken,origin:'https://attacker.invalid'}})).status,403);
-  const good=await fetch(url,{...base,headers:{...base.headers,authorization:'Bearer '+adminToken}});assert.equal(good.status,200);assert.equal((await good.json()).data.items[0].state,'AVAILABLE');assert.deepEqual(fileHashes(f),before);
+  const good=await fetch(url,{...base,headers:{...base.headers,authorization:'Bearer '+adminToken}});assert.equal(good.status,200);assert.equal((await good.json()).data.items[0].state,'AVAILABLE');assert.equal(await dbSnapshot(f),before);
 });

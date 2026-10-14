@@ -38,7 +38,7 @@ function couponHttp(store, { adminToken, rateLimit = 180, catalogAggregateRateLi
       const token = /^Bearer ([A-Za-z0-9_.-]{32,300})$/.exec(req.headers.authorization || '')?.[1];
       if (!token) throw problem('UNAUTHORIZED', '缺少有效的接口凭证', 401);
       const hash = crypto.createHash('sha256').update(token).digest();
-      const actor = crypto.timingSafeEqual(hash, adminHash) ? { id: 'administrator', role: 'admin' } : store.authenticate(token);
+      const actor = crypto.timingSafeEqual(hash, adminHash) ? { id: 'administrator', role: 'admin' } : await store.authenticate(token);
       let input = Object.fromEntries(url.searchParams);
       if (input.page) input.page = Number(input.page);
       if (req.method === 'POST') {
@@ -58,7 +58,7 @@ function couponHttp(store, { adminToken, rateLimit = 180, catalogAggregateRateLi
         const owner = crypto.createHash('sha256').update(input.owner).digest('hex');
         consume(`catalog-owner:${minute}:${owner}`, minute, 60);
       } else consume(`actor:${actor.id}:${minute}`, minute, rateLimit);
-      const data = store.dispatch(actor, action, input);
+      const data = await store.dispatch(actor, action, input);
       res.end(JSON.stringify({ ok: true, data }));
     } catch (error) {
       res.statusCode = error.status || 500;

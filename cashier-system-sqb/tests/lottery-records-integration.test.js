@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import path from 'node:path';
 import {createRequire} from 'node:module';
 import {priceOrder,completeOrder} from '../src/orderLogic.js';
 import {normalizeDrawRecords,drawRedemptionLabel} from '../src/lotteryRecords.js';
@@ -18,7 +17,7 @@ async function settle(f,ledger,code) {
 }
 test('both real lottery services persist wins and misses, show signed records, and reflect cashier redemption without H5 resync',async t=>{
   let scarfTicket=0;
-  const f=await createFixture({randomIndex:()=>325,randomBps:()=>scarfTicket});t.after(()=>f.close());
+  const f=await createFixture({randomIndex:()=>325,randomBps:()=>scarfTicket});t.after(async()=>await f.close());
   assert.equal((await f.payments.dispatch('lottery-records',{})).total,0);
   assert.equal((await f.payments.dispatch('scarf-records',{})).total,0);
   const original=await f.original.call('draw',{},VISITOR);
@@ -52,11 +51,11 @@ test('both real lottery services persist wins and misses, show signed records, a
   assert.deepEqual(f.original.store.get('entries',originalKey),originalBefore);assert.deepEqual(f.scarf.store.get('bubble_scarf_entries',scarfKey),scarfBefore);
   // Read through a newly opened independent SQLite connection, proving that
   // the coupon/redemption state is committed storage, not an in-memory UI flag.
-  const reopened=createCouponStore({file:path.join(f.directory,'isolated-coupons.sqlite'),environment:'production'});
-  try {
-    const bindings=[{recordId:originalKey,...originalBefore.physicalCenter,couponId:originalBefore.physicalCouponId},{recordId:scarfKey,campaignId:scarfBefore.center.campaignId,owner:'scarf-'+scarfKey,awardId:'scarf-'+scarfKey,couponId:scarfBefore.couponId}].map(({recordId,campaignId,owner,awardId,couponId})=>({recordId,campaignId,owner,awardId,couponId}));
-    const saved=reopened.dispatch(f.admin,'lottery-record-status',{centerId:f.centerId,environment:'production',refs:bindings});
-    assert.ok(saved.items.every(row=>row.state==='REDEEMED'));
-  } finally {reopened.close();}
+  // Read through a newly opened independent store connection, proving that
+  // the coupon/redemption state is committed storage, not an in-memory UI flag.
+  const reopened=await createCouponStore({pool:f.pool,ns:f.ns,environment:'production'});
+  const bindings=[{recordId:originalKey,...originalBefore.physicalCenter,couponId:originalBefore.physicalCouponId},{recordId:scarfKey,campaignId:scarfBefore.center.campaignId,owner:'scarf-'+scarfKey,awardId:'scarf-'+scarfKey,couponId:scarfBefore.couponId}].map(({recordId,campaignId,owner,awardId,couponId})=>({recordId,campaignId,owner,awardId,couponId}));
+  const saved=await reopened.dispatch(f.admin,'lottery-record-status',{centerId:f.centerId,environment:'production',refs:bindings});
+  assert.ok(saved.items.every(row=>row.state==='REDEEMED'));
   assert.equal(f.counters.blockedExternalRequests,0);
 });

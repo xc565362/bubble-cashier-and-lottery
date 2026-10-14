@@ -12,6 +12,7 @@ const { createService } = require('../lottery-backend/service.js');
 const { createManagementHttp } = require('../lottery-backend/management-http.cjs');
 const { createLotteryBridge } = require('../payments/lottery.cjs');
 const { createCouponStore } = require('../coupons/store.cjs');
+const { createPosFixture } = require('./helpers/posfixture.cjs');
 
 async function fixture() {
   let tables = new Map(), queue = Promise.resolve();
@@ -170,18 +171,17 @@ test('cashier management connection keeps signing key off public responses and s
   await assert.rejects(bridge.dispatch('connect', { url: 'http://fixture.invalid/lottery', key, campaignId }));
 });
 
-test('coupon quota increases are admin-only, idempotent and never reduce commitments', t => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'lottery-quota-'));
-  const center = createCouponStore({ file: path.join(directory, 'coupons.sqlite') });
-  t.after(() => { center.close(); fs.rmSync(directory, { recursive: true, force: true }); });
+test('coupon quota increases are admin-only, idempotent and never reduce commitments', async t => {
+  const pos = await createPosFixture(t);
+  const center = await createCouponStore({ pool: pos.pool, ns: pos.ns });
   const actor = { id: 'admin', role: 'admin' };
-  const c = center.dispatch(actor, 'create-campaign', { requestId: crypto.randomUUID(), name: 'test', kind: 'cash', amountCents: 500, minimumCents: 0, quota: 5, startsAt: new Date(Date.now() - 1000).toISOString(), expiresAt: new Date(Date.now() + 3600000).toISOString() });
+  const c = await center.dispatch(actor, 'create-campaign', { requestId: crypto.randomUUID(), name: 'test', kind: 'cash', amountCents: 500, minimumCents: 0, quota: 5, startsAt: new Date(Date.now() - 1000).toISOString(), expiresAt: new Date(Date.now() + 3600000).toISOString() });
   const input = { requestId: crypto.randomUUID(), id: c.id, quota: 10, reason: '补充五份' };
-  assert.equal(center.dispatch(actor, 'increase-quota', input).quota, 10);
-  assert.equal(center.dispatch(actor, 'increase-quota', input).lastQuotaAdjustment.reason, input.reason);
-  assert.equal(center.dispatch(actor, 'increase-quota', input).quota, 10);
-  assert.throws(() => center.dispatch(actor, 'increase-quota', { ...input, requestId: crypto.randomUUID(), quota: 8 }));
-  assert.throws(() => center.dispatch({ id: 'lottery', role: 'lottery', campaignId: c.id }, 'increase-quota', { ...input, requestId: crypto.randomUUID() }));
+  assert.equal((await center.dispatch(actor, 'increase-quota', input)).quota, 10);
+  assert.equal((await center.dispatch(actor, 'increase-quota', input)).lastQuotaAdjustment.reason, input.reason);
+  assert.equal((await center.dispatch(actor, 'increase-quota', input)).quota, 10);
+  await assert.rejects(center.dispatch(actor, 'increase-quota', { ...input, requestId: crypto.randomUUID(), quota: 8 }));
+  await assert.rejects(center.dispatch({ id: 'lottery', role: 'lottery', campaignId: c.id }, 'increase-quota', { ...input, requestId: crypto.randomUUID() }));
 });
 
 test('management accepts historical cash campaigns without kind and does not rewrite their records', async () => {

@@ -35,9 +35,9 @@ function createSetup({ auth, file, now = Date.now } = {}) {
   if (!auth || typeof auth.hasUsers !== 'function' || typeof auth.createInitialAdmin !== 'function'
     || typeof file !== 'string' || !file || typeof now !== 'function') throw denied();
 
-  function grant() {
+  async function grant() {
     try {
-      if (auth.hasUsers()) return null;
+      if (await auth.hasUsers()) return null;
       const stat = fs.lstatSync(file);
       if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024) return null;
       const value = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -49,7 +49,7 @@ function createSetup({ auth, file, now = Date.now } = {}) {
   }
 
   async function accept({ token, username, password, displayName } = {}) {
-    const value = grant();
+    const value = await grant();
     const validToken = typeof token === 'string' && /^setup1_[A-Za-z0-9_-]{43}$/.test(token);
     const presentedHash = Buffer.from(tokenHash(validToken ? token : ''), 'hex');
     const expectedHash = Buffer.from(value?.tokenHash || '0'.repeat(64), 'hex');
@@ -64,7 +64,7 @@ function createSetup({ auth, file, now = Date.now } = {}) {
     return user;
   }
 
-  return { setupEnabled: () => Boolean(grant()), accept };
+  return { setupEnabled: async () => Boolean(await grant()), accept };
 }
 
 module.exports = { createSetup, generateGrant, GRANT_MS };

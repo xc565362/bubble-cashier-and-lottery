@@ -1,14 +1,13 @@
 'use strict';
 
 // Trusted server/CLI module. There is deliberately no public registration endpoint.
-// Password methods are async; session reads, logout and user listing are synchronous.
-// Times are Unix milliseconds. HTTP callers must enforce secure cookies, Origin,
-// CSRF and route permissions; context.ip must come from a trusted network source.
-const fs = require('node:fs');
-const path = require('node:path');
+// All methods are async (MySQL storage, tables pos_users/pos_sessions/
+// pos_login_limits/pos_audit). Times are Unix milliseconds. HTTP callers must
+// enforce secure cookies, Origin, CSRF and route permissions; context.ip must
+// come from a trusted network source.
 const crypto = require('node:crypto');
 const { promisify } = require('node:util');
-const { DatabaseSync } = require('node:sqlite');
+const { withTransaction } = require('./mysql.cjs');
 
 const scrypt = promisify(crypto.scrypt);
 const SESSION_MS = 8 * 60 * 60 * 1000;
@@ -54,70 +53,34 @@ function publicUser(row) {
   return {
     id: row.id, username: row.username, displayName: row.display_name,
     role: row.role, disabled: Boolean(row.disabled),
-    createdAt: row.created_at, updatedAt: row.updated_at,
+    createdAt: Number(row.created_at), updatedAt: Number(row.updated_at),
   };
 }
 
-function createAuthStore({ file, now = Date.now } = {}) {
-  if (typeof file !== 'string' || !file || typeof now !== 'function') throw fail('INVALID_STORE', '需要认证数据库文件');
-  if (file !== ':memory:') {
-    fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true, mode: 0o700 });
-    if (fs.existsSync(file)) {
-      const stat = fs.lstatSync(file);
-      if (!stat.isFile() || stat.isSymbolicLink()) throw fail('INVALID_STORE', '认证数据库必须是普通文件');
-    } else {
-      const fd = fs.openSync(file, 'wx', 0o600);
-      fs.closeSync(fd);
-    }
-    fs.chmodSync(file, 0o600);
-  }
-  const db = new DatabaseSync(file);
-  db.exec(`PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('admin','cashier')), disabled INTEGER NOT NULL DEFAULT 0,
-      salt TEXT NOT NULL, password_hash TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL REFERENCES users(id),
-      created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id, created_at);
-    CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires_at);
-    CREATE TABLE IF NOT EXISTS login_limits (bucket TEXT PRIMARY KEY, attempts INTEGER NOT NULL, reset_at INTEGER NOT NULL);
-    CREATE TABLE IF NOT EXISTS audit (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, action TEXT NOT NULL,
-      actor_id TEXT, user_id TEXT, metadata TEXT NOT NULL
-    );`);
-  let closed = false;
+function createAuthStore({ pool, ns = '', now = Date.now } = {}) {
+  if (!pool || typeof pool.query !== 'function') throw fail('INVALID_STORE', '需要认证数据库连接池', 500);
+  if (typeof now !== 'function') throw fail('INVALID_STORE', '需要认证时间源', 500);
   let kdfInFlight = 0;
   const timestamp = () => {
     const value = Number(now());
     if (!Number.isSafeInteger(value) || value < 0) throw fail('INVALID_CLOCK', '无效的服务器时间', 500);
     return value;
   };
-  const userById = (id) => typeof id === 'string' ? db.prepare('SELECT * FROM users WHERE id = ?').get(id) : undefined;
+  const userById = async (id, q = pool) => {
+    if (typeof id !== 'string') return undefined;
+    const [rows] = await q.query('SELECT * FROM pos_users WHERE ns = ? AND id = ?', [ns, id]);
+    return rows[0];
+  };
 
-  function transaction(work) {
-    db.exec('BEGIN IMMEDIATE');
-    try {
-      const result = work();
-      db.exec('COMMIT');
-      return result;
-    } catch (error) {
-      db.exec('ROLLBACK');
-      throw error;
-    }
+  async function audit(q, action, actorId, userId, metadata = {}) {
+    await q.query('INSERT INTO pos_audit(ns, at, action, actor_id, user_id, metadata) VALUES(?,?,?,?,?,?)',
+      [ns, timestamp(), action, actorId || null, userId || null, JSON.stringify(metadata)]);
+    await q.query(`DELETE FROM pos_audit WHERE ns = ? AND id < COALESCE(
+      (SELECT id FROM (SELECT id FROM pos_audit WHERE ns = ? ORDER BY id DESC LIMIT 1 OFFSET 4999) trimmed), 0)`, [ns, ns]);
   }
 
-  function audit(action, actorId, userId, metadata = {}) {
-    db.prepare('INSERT INTO audit(at, action, actor_id, user_id, metadata) VALUES(?,?,?,?,?)')
-      .run(timestamp(), action, actorId || null, userId || null, JSON.stringify(metadata));
-    db.exec('DELETE FROM audit WHERE id < COALESCE((SELECT id FROM audit ORDER BY id DESC LIMIT 1 OFFSET 4999), 0)');
-  }
-
-  function requireAdmin(actor) {
-    const user = userById(actor?.id);
+  async function requireAdmin(actor, q = pool) {
+    const user = await userById(actor?.id, q);
     if (!user || user.disabled || user.role !== 'admin') throw fail('FORBIDDEN', '需要管理员权限', 403);
     return user;
   }
@@ -148,45 +111,63 @@ function createAuthStore({ file, now = Date.now } = {}) {
 
   // All buckets are persisted, opaque hashes and bounded. No unbounded IP maps.
   // Account/pair buckets reset after success; IP/global caps also bound valid logins.
-  function consumeLimits(specs) {
+  async function consumeLimits(specs) {
     const time = timestamp();
-    const blocked = transaction(() => {
-      db.prepare('DELETE FROM login_limits WHERE reset_at <= ?').run(time);
-      const count = Number(db.prepare('SELECT count(*) AS n FROM login_limits').get().n);
-      const entries = specs.map(([label, max, window]) => {
+    const blocked = await withTransaction(pool, async (q) => {
+      await q.query('DELETE FROM pos_login_limits WHERE ns = ? AND reset_at <= ?', [ns, time]);
+      const [countRows] = await q.query('SELECT COUNT(*) AS n FROM pos_login_limits WHERE ns = ?', [ns]);
+      const count = Number(countRows[0].n);
+      const entries = [];
+      for (const [label, max, window] of specs) {
         const bucket = digest(label);
-        return { bucket, max, window, row: db.prepare('SELECT * FROM login_limits WHERE bucket = ?').get(bucket) };
-      });
+        const [rows] = await q.query('SELECT * FROM pos_login_limits WHERE ns = ? AND bucket = ?', [ns, bucket]);
+        entries.push({ bucket, max, window, row: rows[0] });
+      }
       if (count + entries.filter((entry) => !entry.row).length > MAX_BUCKETS) return true;
       let limited = false;
       for (const entry of entries) {
         if (entry.row && entry.row.attempts >= entry.max) { limited = true; continue; }
-        db.prepare(`INSERT INTO login_limits(bucket,attempts,reset_at) VALUES(?,1,?)
-          ON CONFLICT(bucket) DO UPDATE SET attempts=attempts+1`).run(entry.bucket, time + entry.window);
+        await q.query(`INSERT INTO pos_login_limits(ns, bucket, attempts, reset_at) VALUES(?,?,1,?)
+          ON DUPLICATE KEY UPDATE attempts = attempts + 1`, [ns, entry.bucket, time + entry.window]);
       }
       return limited;
     });
     if (blocked) throw fail('RATE_LIMITED', '尝试过于频繁，请稍后重试', 429);
   }
 
-  function insertUser(input, role, password) {
+  async function insertUser(q, input, role, password) {
     const time = timestamp();
     const id = crypto.randomUUID();
-    if (db.prepare('SELECT id FROM users WHERE username = ?').get(input.username)) throw fail('USERNAME_EXISTS', '用户名已存在', 409);
-    db.prepare(`INSERT INTO users(id,username,display_name,role,salt,password_hash,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,?,?)`).run(id, input.username, input.displayName, role, password.salt, password.hash, time, time);
-    return publicUser(userById(id));
+    const [rows] = await q.query('SELECT id FROM pos_users WHERE ns = ? AND username = ?', [ns, input.username]);
+    if (rows.length) throw fail('USERNAME_EXISTS', '用户名已存在', 409);
+    try {
+      await q.query(`INSERT INTO pos_users(ns, id, username, display_name, role, salt, password_hash, created_at, updated_at)
+        VALUES(?,?,?,?,?,?,?,?,?)`, [ns, id, input.username, input.displayName, role, password.salt, password.hash, time, time]);
+    } catch (error) {
+      if (error.code === 'ER_DUP_ENTRY') throw fail('USERNAME_EXISTS', '用户名已存在', 409);
+      throw error;
+    }
+    return publicUser(await userById(id, q));
   }
 
   async function createInitialAdmin({ username, password, displayName } = {}) {
     const name = usernameOf(username);
     const input = { username: name, displayName: displayNameOf(displayName, name) };
     const hashed = await hashPassword(password);
-    return transaction(() => {
-      if (db.prepare('SELECT id FROM users LIMIT 1').get()) throw fail('ALREADY_INITIALIZED', '管理员已初始化', 409);
-      const user = insertUser(input, 'admin', hashed);
-      audit('admin.initialized', user.id, user.id);
-      return user;
+    return withTransaction(pool, async (q) => {
+      // RR snapshots cannot serialize the "first user" phantom; a server-wide
+      // named lock replaces SQLite's BEGIN IMMEDIATE single-writer guarantee.
+      const [lockRows] = await q.query('SELECT GET_LOCK(?, 10) AS acquired', [`pos_auth_init_${ns}`]);
+      if (Number(lockRows[0].acquired) !== 1) throw fail('AUTH_BUSY', '认证服务繁忙，请稍后重试', 503);
+      try {
+        const [rows] = await q.query('SELECT id FROM pos_users WHERE ns = ? LIMIT 1', [ns]);
+        if (rows.length) throw fail('ALREADY_INITIALIZED', '管理员已初始化', 409);
+        const user = await insertUser(q, input, 'admin', hashed);
+        await audit(q, 'admin.initialized', user.id, user.id);
+        return user;
+      } finally {
+        await q.query('SELECT RELEASE_LOCK(?)', [`pos_auth_init_${ns}`]).catch(() => {});
+      }
     });
   }
 
@@ -196,75 +177,79 @@ function createAuthStore({ file, now = Date.now } = {}) {
     const ip = typeof context.ip === 'string' && context.ip.length <= 256 ? context.ip : '<unknown>';
     const accountBucket = `account:${name}`;
     const pairBucket = `pair:${name}:${ip}`;
-    consumeLimits([
+    await consumeLimits([
       [pairBucket, 5, 15 * 60 * 1000], [accountBucket, 20, 15 * 60 * 1000],
       [`ip:${ip}`, 60, 15 * 60 * 1000], ['global', 200, 60 * 1000],
     ]);
-    const initial = db.prepare('SELECT * FROM users WHERE username = ?').get(name);
+    const [initialRows] = await pool.query('SELECT * FROM pos_users WHERE ns = ? AND username = ?', [ns, name]);
+    const initial = initialRows[0];
     const match = await matches(password, initial);
-    return transaction(() => {
-      const user = initial && userById(initial.id);
+    const session = await withTransaction(pool, async (q) => {
+      const user = initial && await userById(initial.id, q);
       if (!match || !user || user.disabled || user.password_hash !== initial.password_hash) {
-        audit('login.failed', null, initial?.id, { account: digest(name), ip: digest(ip) });
+        await audit(q, 'login.failed', null, initial?.id, { account: digest(name), ip: digest(ip) });
         // Commit the audit/limits before reporting an authentication failure.
         return null;
       }
       const time = timestamp();
-      db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(time);
-      db.prepare(`DELETE FROM sessions WHERE user_id = ? AND id NOT IN
-        (SELECT id FROM sessions WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?)`)
-        .run(user.id, user.id, MAX_SESSIONS - 1);
+      await q.query('DELETE FROM pos_sessions WHERE ns = ? AND expires_at <= ?', [ns, time]);
+      await q.query(`DELETE FROM pos_sessions WHERE ns = ? AND user_id = ? AND id NOT IN
+        (SELECT id FROM (SELECT id FROM pos_sessions WHERE ns = ? AND user_id = ? ORDER BY created_at DESC, seq DESC LIMIT ?) kept)`,
+        [ns, user.id, ns, user.id, MAX_SESSIONS - 1]);
       const token = `s1_${crypto.randomBytes(32).toString('base64url')}`;
       const sessionId = crypto.randomUUID();
       const expiresAt = time + SESSION_MS;
-      db.prepare('INSERT INTO sessions(id,token_hash,user_id,created_at,expires_at) VALUES(?,?,?,?,?)')
-        .run(sessionId, digest(token), user.id, time, expiresAt);
-      db.prepare('DELETE FROM login_limits WHERE bucket IN (?,?)').run(digest(accountBucket), digest(pairBucket));
-      audit('login.succeeded', user.id, user.id, { sessionId, ip: digest(ip) });
+      await q.query('INSERT INTO pos_sessions(ns, id, token_hash, user_id, created_at, expires_at) VALUES(?,?,?,?,?,?)',
+        [ns, sessionId, digest(token), user.id, time, expiresAt]);
+      await q.query('DELETE FROM pos_login_limits WHERE ns = ? AND bucket IN (?,?)', [ns, digest(accountBucket), digest(pairBucket)]);
+      await audit(q, 'login.succeeded', user.id, user.id, { sessionId, ip: digest(ip) });
       return { token, sessionId, user: publicUser(user), csrfToken: csrf(token), expiresAt };
-    }) || (() => { throw fail('INVALID_CREDENTIALS', '用户名或密码不正确', 401); })();
+    });
+    return session || (() => { throw fail('INVALID_CREDENTIALS', '用户名或密码不正确', 401); })();
   }
 
-  function getSession(rawToken) {
+  async function getSession(rawToken) {
     if (typeof rawToken !== 'string' || !/^s1_[A-Za-z0-9_-]{43}$/.test(rawToken)) return null;
-    const session = db.prepare('SELECT * FROM sessions WHERE token_hash = ?').get(digest(rawToken));
+    const [rows] = await pool.query('SELECT * FROM pos_sessions WHERE ns = ? AND token_hash = ?', [ns, digest(rawToken)]);
+    const session = rows[0];
     if (!session) return null;
-    const user = userById(session.user_id);
-    if (!user || user.disabled || session.expires_at <= timestamp()) {
-      db.prepare('DELETE FROM sessions WHERE id = ?').run(session.id);
+    const user = await userById(session.user_id);
+    if (!user || user.disabled || Number(session.expires_at) <= timestamp()) {
+      await pool.query('DELETE FROM pos_sessions WHERE ns = ? AND id = ?', [ns, session.id]);
       return null;
     }
-    return { sessionId: session.id, user: publicUser(user), csrfToken: csrf(rawToken), expiresAt: session.expires_at };
+    return { sessionId: session.id, user: publicUser(user), csrfToken: csrf(rawToken), expiresAt: Number(session.expires_at) };
   }
 
-  function logout(rawToken) {
+  async function logout(rawToken) {
     if (typeof rawToken !== 'string' || !/^s1_[A-Za-z0-9_-]{43}$/.test(rawToken)) return { ok: true };
-    return transaction(() => {
-      const row = db.prepare('SELECT * FROM sessions WHERE token_hash = ?').get(digest(rawToken));
+    return withTransaction(pool, async (q) => {
+      const [rows] = await q.query('SELECT * FROM pos_sessions WHERE ns = ? AND token_hash = ?', [ns, digest(rawToken)]);
+      const row = rows[0];
       if (row) {
-        db.prepare('DELETE FROM sessions WHERE id = ?').run(row.id);
-        audit('logout', row.user_id, row.user_id, { sessionId: row.id });
+        await q.query('DELETE FROM pos_sessions WHERE ns = ? AND id = ?', [ns, row.id]);
+        await audit(q, 'logout', row.user_id, row.user_id, { sessionId: row.id });
       }
       return { ok: true };
     });
   }
 
   async function createUser({ username, password, displayName, role = 'cashier' } = {}, actor) {
-    requireAdmin(actor);
+    await requireAdmin(actor);
     const name = usernameOf(username);
     const input = { username: name, displayName: displayNameOf(displayName, name) };
     const checkedRole = roleOf(role);
     const hashed = await hashPassword(password);
-    return transaction(() => {
-      const admin = requireAdmin(actor);
-      const user = insertUser(input, checkedRole, hashed);
-      audit('user.created', admin.id, user.id, { role: checkedRole });
+    return withTransaction(pool, async (q) => {
+      const admin = await requireAdmin(actor, q);
+      const user = await insertUser(q, input, checkedRole, hashed);
+      await audit(q, 'user.created', admin.id, user.id, { role: checkedRole });
       return user;
     });
   }
 
   async function updateUser(id, patch = {}, actor) {
-    requireAdmin(actor);
+    await requireAdmin(actor);
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)
       || Object.keys(patch).some((key) => !['displayName', 'role', 'disabled', 'password'].includes(key))) {
       throw fail('INVALID_UPDATE', '无效的账号更新内容');
@@ -274,53 +259,60 @@ function createAuthStore({ file, now = Date.now } = {}) {
     const role = has('role') ? roleOf(patch.role) : undefined;
     if (has('disabled') && typeof patch.disabled !== 'boolean') throw fail('INVALID_UPDATE', '停用状态必须是布尔值');
     const password = has('password') ? await hashPassword(patch.password) : undefined;
-    return transaction(() => {
-      const admin = requireAdmin(actor);
-      const user = userById(id);
+    return withTransaction(pool, async (q) => {
+      const admin = await requireAdmin(actor, q);
+      const user = await userById(id, q);
       if (!user) throw fail('USER_NOT_FOUND', '账号不存在', 404);
       const nextRole = role ?? user.role;
       const disabled = has('disabled') ? Number(patch.disabled) : user.disabled;
       if (user.role === 'admin' && !user.disabled && (nextRole !== 'admin' || disabled)) {
-        const count = db.prepare("SELECT count(*) AS n FROM users WHERE role='admin' AND disabled=0").get().n;
-        if (count <= 1) throw fail('LAST_ADMIN', '必须保留至少一个启用的管理员', 409);
+        const [rows] = await q.query("SELECT COUNT(*) AS n FROM pos_users WHERE ns = ? AND role = 'admin' AND disabled = 0", [ns]);
+        if (Number(rows[0].n) <= 1) throw fail('LAST_ADMIN', '必须保留至少一个启用的管理员', 409);
       }
-      db.prepare('UPDATE users SET display_name=?, role=?, disabled=?, salt=?, password_hash=?, updated_at=? WHERE id=?')
-        .run(displayName ?? user.display_name, nextRole, disabled, password?.salt ?? user.salt,
-          password?.hash ?? user.password_hash, timestamp(), user.id);
+      await q.query('UPDATE pos_users SET display_name = ?, role = ?, disabled = ?, salt = ?, password_hash = ?, updated_at = ? WHERE ns = ? AND id = ?',
+        [displayName ?? user.display_name, nextRole, disabled, password?.salt ?? user.salt,
+          password?.hash ?? user.password_hash, timestamp(), ns, user.id]);
       const revoked = Boolean(password) || nextRole !== user.role || disabled !== user.disabled;
-      if (revoked) db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
-      audit('user.updated', admin.id, user.id, { fields: Object.keys(patch), sessionsRevoked: revoked });
-      return publicUser(userById(id));
+      if (revoked) await q.query('DELETE FROM pos_sessions WHERE ns = ? AND user_id = ?', [ns, user.id]);
+      await audit(q, 'user.updated', admin.id, user.id, { fields: Object.keys(patch), sessionsRevoked: revoked });
+      return publicUser(await userById(id, q));
     });
   }
 
   async function changePassword(userId, currentPassword, newPassword) {
     passwordOf(newPassword);
-    const initial = userById(userId);
+    const initial = await userById(userId);
     if (!initial || initial.disabled) throw fail('INVALID_CREDENTIALS', '用户名或密码不正确', 401);
-    consumeLimits([[`password:${initial.id}`, 5, 15 * 60 * 1000]]);
+    await consumeLimits([[`password:${initial.id}`, 5, 15 * 60 * 1000]]);
     if (!(await matches(currentPassword, initial))) {
-      audit('password.failed', initial.id, initial.id);
+      await audit(pool, 'password.failed', initial.id, initial.id);
       throw fail('INVALID_CREDENTIALS', '用户名或密码不正确', 401);
     }
     const hashed = await hashPassword(newPassword);
-    return transaction(() => {
-      const user = userById(initial.id);
+    return withTransaction(pool, async (q) => {
+      const user = await userById(initial.id, q);
       if (!user || user.disabled || user.password_hash !== initial.password_hash) throw fail('INVALID_CREDENTIALS', '用户名或密码不正确', 401);
-      db.prepare('UPDATE users SET salt=?,password_hash=?,updated_at=? WHERE id=?')
-        .run(hashed.salt, hashed.hash, timestamp(), user.id);
-      db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
-      db.prepare('DELETE FROM login_limits WHERE bucket=?').run(digest(`password:${user.id}`));
-      audit('password.changed', user.id, user.id, { sessionsRevoked: true });
-      return publicUser(userById(user.id));
+      await q.query('UPDATE pos_users SET salt = ?, password_hash = ?, updated_at = ? WHERE ns = ? AND id = ?',
+        [hashed.salt, hashed.hash, timestamp(), ns, user.id]);
+      await q.query('DELETE FROM pos_sessions WHERE ns = ? AND user_id = ?', [ns, user.id]);
+      await q.query('DELETE FROM pos_login_limits WHERE ns = ? AND bucket = ?', [ns, digest(`password:${user.id}`)]);
+      await audit(q, 'password.changed', user.id, user.id, { sessionsRevoked: true });
+      return publicUser(await userById(user.id, q));
     });
   }
 
   return {
     createInitialAdmin, authenticate, getSession, logout, createUser, updateUser, changePassword,
-    listUsers: () => db.prepare('SELECT * FROM users ORDER BY created_at, username').all().map(publicUser),
-    hasUsers: () => Boolean(db.prepare('SELECT id FROM users LIMIT 1').get()),
-    close() { if (!closed) { db.close(); closed = true; } },
+    async listUsers() {
+      const [rows] = await pool.query('SELECT * FROM pos_users WHERE ns = ? ORDER BY created_at, username', [ns]);
+      return rows.map(publicUser);
+    },
+    async hasUsers() {
+      const [rows] = await pool.query('SELECT id FROM pos_users WHERE ns = ? LIMIT 1', [ns]);
+      return Boolean(rows.length);
+    },
+    // The pool belongs to the caller; close() is kept for interface stability.
+    close() {},
   };
 }
 

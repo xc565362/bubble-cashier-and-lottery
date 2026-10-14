@@ -14,108 +14,107 @@ const { couponHttp } = require('../coupons/http.cjs');
 const { createLotteryClient } = require('../coupons/lottery-client.cjs');
 const { createService } = require('../payments/service.cjs');
 const { signedEnvelope } = require('../payments/litepos.cjs');
+const { createPosFixture } = require('./helpers/posfixture.cjs');
 const admin = { id: 'admin', role: 'admin' };
 const cashier = { id: 'terminal1', role: 'cashier' };
 const uid = () => crypto.randomUUID();
-function fixture(t, options = {}) {
+async function fixture(t, options = {}) {
+  const pos = await createPosFixture(t);
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coupon-center-'));
   let time = Date.now();
-  const file = path.join(directory, 'coupons.sqlite');
-  const store = createCouponStore({ file, now: () => time, ...options });
+  const store = await createCouponStore({ pool: pos.pool, ns: pos.ns, now: () => time, ...options });
   t.after(() => { store.close(); fs.rmSync(directory, { recursive: true, force: true }); });
   const call = (action, input = {}, actor = admin) => store.dispatch(actor, action, { requestId: uid(), ...input });
-  const campaign = call('create-campaign', { name: 'Lottery discount', amountCents: 500, minimumCents: 0, quota: 2, startsAt: new Date(time - 1000).toISOString(), expiresAt: new Date(time + 86400000).toISOString() });
+  const campaign = await call('create-campaign', { name: 'Lottery discount', amountCents: 500, minimumCents: 0, quota: 2, startsAt: new Date(time - 1000).toISOString(), expiresAt: new Date(time + 86400000).toISOString() });
   const issue = (extra = {}, actor = admin) => call('issue', { campaignId: campaign.id, owner: 'customer-a', awardId: uid(), ...extra }, actor);
   const reserve = (coupon, extra = {}, actor = cashier) => call('reserve', { code: coupon.code, eligibleCents: 1000, checkoutId: uid(), ...extra }, actor);
-  return { directory, file, store, call, campaign, issue, reserve, advance: ms => { time += ms; } };
+  return { ...pos, directory, store, call, campaign, issue, reserve, advance: ms => { time += ms; } };
 }
 
-test('coupon issuance is idempotent by request and award; amounts, owner, quota and scope are immutable', t => {
-  const f = fixture(t);
-  const token = f.call('create-key', { name: 'Lottery', role: 'lottery', campaignId: f.campaign.id });
-  const lottery = f.store.authenticate(token.token);
+test('coupon issuance is idempotent by request and award; amounts, owner, quota and scope are immutable', async t => {
+  const f = await fixture(t);
+  const token = await f.call('create-key', { name: 'Lottery', role: 'lottery', campaignId: f.campaign.id });
+  const lottery = await f.store.authenticate(token.token);
   const input = { requestId: 'req1', awardId: 'award1' };
-  const a = f.issue(input, lottery);
-  assert.equal(f.issue(input, lottery).id, a.id);
-  assert.equal(f.issue({ awardId: 'award1' }, lottery).id, a.id);
-  assert.throws(() => f.issue({ ...input, owner: 'other' }, lottery), /不同内容/);
-  assert.throws(() => f.issue({ awardId: 'award1', owner: 'other' }, lottery), /其他领取人/);
-  assert.throws(() => f.call('coupon', { id: a.id, owner: 'other' }, lottery), /无权/);
-  assert.throws(() => f.call('create-campaign', {}, lottery), /权限/);
-  assert.throws(() => f.call('reserve', { code: a.code }, lottery), /权限/);
-  assert.equal(f.call('coupons', { owner: 'other' }, lottery).total, 0);
-  f.issue({}, lottery);
-  assert.throws(() => f.issue({}, lottery), /上限/);
-  assert.equal(f.call('campaigns')[0].issued, 2);
-  assert.throws(() => f.call('create-campaign', { startsAt: 'invalid', expiresAt: 'invalid' }), /时间/);
+  const a = await f.issue(input, lottery);
+  assert.equal((await f.issue(input, lottery)).id, a.id);
+  assert.equal((await f.issue({ awardId: 'award1' }, lottery)).id, a.id);
+  await assert.rejects(f.issue({ ...input, owner: 'other' }, lottery), /不同内容/);
+  await assert.rejects(f.issue({ awardId: 'award1', owner: 'other' }, lottery), /其他领取人/);
+  await assert.rejects(f.call('coupon', { id: a.id, owner: 'other' }, lottery), /无权/);
+  await assert.rejects(f.call('create-campaign', {}, lottery), /权限/);
+  await assert.rejects(f.call('reserve', { code: a.code }, lottery), /权限/);
+  assert.equal((await f.call('coupons', { owner: 'other' }, lottery)).total, 0);
+  await f.issue({}, lottery);
+  await assert.rejects(f.issue({}, lottery), /上限/);
+  assert.equal((await f.call('campaigns'))[0].issued, 2);
+  await assert.rejects(f.call('create-campaign', { startsAt: 'invalid', expiresAt: 'invalid' }), /时间/);
 });
 
-test('rotating scoped lottery credentials preserves award identity and customer access', t => {
-  const f = fixture(t);
-  const a = f.call('create-key', { name: 'Old', role: 'lottery', campaignId: f.campaign.id });
-  const coupon = f.issue({ awardId: 'stable-award' }, f.store.authenticate(a.token));
-  f.call('revoke-key', { id: a.id });
-  assert.throws(() => f.store.authenticate(a.token), /停用/);
-  const b = f.call('create-key', { name: 'New', role: 'lottery', campaignId: f.campaign.id });
-  const actor = f.store.authenticate(b.token);
-  assert.equal(f.issue({ awardId: 'stable-award' }, actor).id, coupon.id);
-  assert.equal(f.call('coupons', { owner: 'customer-a' }, actor).total, 1);
-  assert.ok(!JSON.stringify(f.call('keys')).includes(b.token));
+test('rotating scoped lottery credentials preserves award identity and customer access', async t => {
+  const f = await fixture(t);
+  const a = await f.call('create-key', { name: 'Old', role: 'lottery', campaignId: f.campaign.id });
+  const coupon = await f.issue({ awardId: 'stable-award' }, await f.store.authenticate(a.token));
+  await f.call('revoke-key', { id: a.id });
+  await assert.rejects(f.store.authenticate(a.token), /停用/);
+  const b = await f.call('create-key', { name: 'New', role: 'lottery', campaignId: f.campaign.id });
+  const actor = await f.store.authenticate(b.token);
+  assert.equal((await f.issue({ awardId: 'stable-award' }, actor)).id, coupon.id);
+  assert.equal((await f.call('coupons', { owner: 'customer-a' }, actor)).total, 1);
+  assert.ok(!JSON.stringify(await f.call('keys')).includes(b.token));
 });
 
-test('secret codes reject forgery; two database connections cannot reserve the same coupon', t => {
-  const f = fixture(t);
-  const coupon = f.issue();
-  assert.throws(() => f.reserve({ code: coupon.code.slice(0, -1) + (coupon.code.endsWith('A') ? 'B' : 'A') }), { code: 'INVALID_CODE' });
-  const second = createCouponStore({ file: f.file });
-  try {
-    f.reserve(coupon);
-    assert.throws(() => second.dispatch({ ...cashier, id: 'terminal2' }, 'reserve', { code: coupon.code, checkoutId: uid(), eligibleCents: 1000, requestId: uid() }), /占用/);
-  } finally { second.close(); }
+test('secret codes reject forgery; two database connections cannot reserve the same coupon', async t => {
+  const f = await fixture(t);
+  const coupon = await f.issue();
+  await assert.rejects(f.reserve({ code: coupon.code.slice(0, -1) + (coupon.code.endsWith('A') ? 'B' : 'A') }), { code: 'INVALID_CODE' });
+  const second = await createCouponStore({ pool: f.pool, ns: f.ns });
+  await f.reserve(coupon);
+  await assert.rejects(second.dispatch({ ...cashier, id: 'terminal2' }, 'reserve', { code: coupon.code, checkoutId: uid(), eligibleCents: 1000, requestId: uid() }), /占用/);
 });
 
-test('reserved coupons expire but payment-pending coupons never auto-release even beyond validity', t => {
-  const f = fixture(t); const coupon = f.issue();
-  f.reserve(coupon); f.advance(16 * 60000);
-  const r = f.reserve(coupon).reservation;
-  f.call('prepare', { id: r.id, orderId: 'order1', orderNo: 'POS1', eligibleCents: 1000, paidCents: 500 }, cashier);
+test('reserved coupons expire but payment-pending coupons never auto-release even beyond validity', async t => {
+  const f = await fixture(t); const coupon = await f.issue();
+  await f.reserve(coupon); f.advance(16 * 60000);
+  const r = (await f.reserve(coupon)).reservation;
+  await f.call('prepare', { id: r.id, orderId: 'order1', orderNo: 'POS1', eligibleCents: 1000, paidCents: 500 }, cashier);
   f.advance(2 * 86400000);
-  assert.equal(f.call('coupon', { id: coupon.id }).state, 'PAYMENT_PENDING');
-  assert.throws(() => f.call('release', { id: r.id }, cashier), /支付结果未知/);
-  assert.throws(() => f.call('commit', { id: r.id, orderId: 'wrong', paidCents: 500, paymentReference: 'SQB1' }, cashier), /不一致/);
-  f.call('commit', { id: r.id, orderId: 'order1', paidCents: 500, paymentReference: 'SQB1' }, cashier);
-  assert.equal(f.call('coupon', { id: coupon.id }).state, 'REDEEMED');
-  assert.throws(() => f.call('release', { id: r.id, orderId: 'order1', outcome: 'failed' }, cashier), /已核销/);
+  assert.equal((await f.call('coupon', { id: coupon.id })).state, 'PAYMENT_PENDING');
+  await assert.rejects(f.call('release', { id: r.id }, cashier), /支付结果未知/);
+  await assert.rejects(f.call('commit', { id: r.id, orderId: 'wrong', paidCents: 500, paymentReference: 'SQB1' }, cashier), /不一致/);
+  await f.call('commit', { id: r.id, orderId: 'order1', paidCents: 500, paymentReference: 'SQB1' }, cashier);
+  assert.equal((await f.call('coupon', { id: coupon.id })).state, 'REDEEMED');
+  await assert.rejects(f.call('release', { id: r.id, orderId: 'order1', outcome: 'failed' }, cashier), /已核销/);
 });
 
-test('discount cap, minimum spend and terminal binding are checked at prepare; only confirmed failure releases', t => {
-  const f = fixture(t); const coupon = f.issue();
-  const r = f.reserve(coupon, { eligibleCents: 200 }).reservation;
+test('discount cap, minimum spend and terminal binding are checked at prepare; only confirmed failure releases', async t => {
+  const f = await fixture(t); const coupon = await f.issue();
+  const r = (await f.reserve(coupon, { eligibleCents: 200 })).reservation;
   assert.equal(r.discountCents, 200);
-  assert.throws(() => f.call('prepare', { id: r.id, orderId: 'o1', orderNo: 'p1', eligibleCents: 200, paidCents: 1 }, cashier), /不一致/);
-  assert.throws(() => f.call('reservation', { id: r.id }, { ...cashier, id: 'terminal2' }), /其他收银终端/);
-  f.call('prepare', { id: r.id, orderId: 'o1', orderNo: 'p1', eligibleCents: 200, paidCents: 0 }, cashier);
-  f.call('release', { id: r.id, orderId: 'o1', outcome: 'failed' }, cashier);
-  assert.equal(f.call('coupon', { id: coupon.id }).state, 'AVAILABLE');
-  const c = f.call('create-campaign', { ...f.campaign, name: 'Min', minimumCents: 2000, quota: 1 });
-  const minimum = f.issue({ campaignId: c.id });
-  assert.throws(() => f.reserve(minimum), /门槛/);
+  await assert.rejects(f.call('prepare', { id: r.id, orderId: 'o1', orderNo: 'p1', eligibleCents: 200, paidCents: 1 }, cashier), /不一致/);
+  await assert.rejects(f.call('reservation', { id: r.id }, { ...cashier, id: 'terminal2' }), /其他收银终端/);
+  await f.call('prepare', { id: r.id, orderId: 'o1', orderNo: 'p1', eligibleCents: 200, paidCents: 0 }, cashier);
+  await f.call('release', { id: r.id, orderId: 'o1', outcome: 'failed' }, cashier);
+  assert.equal((await f.call('coupon', { id: coupon.id })).state, 'AVAILABLE');
+  const c = await f.call('create-campaign', { ...f.campaign, name: 'Min', minimumCents: 2000, quota: 1 });
+  const minimum = await f.issue({ campaignId: c.id });
+  await assert.rejects(f.reserve(minimum), /门槛/);
 });
 
-test('issuance retries show the latest state and no usable code after redemption; paused campaigns stop issuing only', t => {
-  const f = fixture(t); const input = { requestId: 'issue1', awardId: 'award1' }; const coupon = f.issue(input);
-  f.call('set-campaign', { id: f.campaign.id, enabled: false });
-  assert.throws(() => f.issue(), /暂停/);
-  const r = f.reserve(coupon).reservation;
-  f.call('prepare', { id: r.id, orderId: 'o1', orderNo: 'p1', eligibleCents: 1000, paidCents: 500 }, cashier);
-  f.call('commit', { id: r.id, orderId: 'o1', paidCents: 500, paymentReference: 'sqb1' }, cashier);
-  const retried = f.issue(input);
+test('issuance retries show the latest state and no usable code after redemption; paused campaigns stop issuing only', async t => {
+  const f = await fixture(t); const input = { requestId: 'issue1', awardId: 'award1' }; const coupon = await f.issue(input);
+  await f.call('set-campaign', { id: f.campaign.id, enabled: false });
+  await assert.rejects(f.issue(), /暂停/);
+  const r = (await f.reserve(coupon)).reservation;
+  await f.call('prepare', { id: r.id, orderId: 'o1', orderNo: 'p1', eligibleCents: 1000, paidCents: 500 }, cashier);
+  await f.call('commit', { id: r.id, orderId: 'o1', paidCents: 500, paymentReference: 'sqb1' }, cashier);
+  const retried = await f.issue(input);
   assert.equal(retried.state, 'REDEEMED'); assert.equal(retried.code, undefined);
 });
 
 test('lottery SDK retrieves only server-selected user coupons through authenticated HTTP; no browser or admin access', async t => {
-  const f = fixture(t); const adminToken = 'a'.repeat(64);
-  const key = f.call('create-key', { name: 'Backend', role: 'lottery', campaignId: f.campaign.id });
+  const f = await fixture(t); const adminToken = 'a'.repeat(64);
+  const key = await f.call('create-key', { name: 'Backend', role: 'lottery', campaignId: f.campaign.id });
   const server = http.createServer(couponHttp(f.store, { adminToken }));
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => { server.closeAllConnections(); server.close(); });
@@ -135,9 +134,10 @@ test('lottery SDK retrieves only server-selected user coupons through authentica
 });
 
 async function bridgeFixture(t, amountCents = 500) {
+  const pos = await createPosFixture(t);
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coupon-bridge-'));
-  const bridge = createCouponBridge({ directory });
-  t.after(() => { bridge.close(); fs.rmSync(directory, { recursive: true, force: true }); });
+  const bridge = createCouponBridge({ directory, storeNs: pos.ns });
+  t.after(async () => { await bridge.close(); fs.rmSync(directory, { recursive: true, force: true }); });
   const c = await bridge.dispatch('create-campaign', { name: 'Discount', amountCents, minimumCents: 0, quota: 10, startsAt: new Date(Date.now() - 1000).toISOString(), expiresAt: new Date(Date.now() + 86400000).toISOString(), requestId: uid() });
   const coupon = await bridge.dispatch('issue', { campaignId: c.id, owner: 'customer', awardId: uid(), requestId: uid() });
   const line = await bridge.dispatch('reserve', { code: coupon.code, checkoutId: uid(), eligibleCents: 1000, requestId: uid() });
@@ -174,7 +174,7 @@ test('zero settlement uses no payment gateway, stays recoverable until local ord
 });
 
 test('production coupons reject test payment before locking an order and remain usable with production payment', async t => {
-  const f = fixture(t, { environment: 'production' });
+  const f = await fixture(t, { environment: 'production' });
   const adminToken = 'a'.repeat(64);
   const server = http.createServer(couponHttp(f.store, { adminToken }));
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -184,18 +184,18 @@ test('production coupons reject test payment before locking an order and remain 
     fetchFn: (url, options) => fetch(`${base}${url.pathname}${url.search}`, options) });
   t.after(() => bridge.close());
   await bridge.dispatch('connect', { baseUrl: 'https://coupons.example.com', adminToken });
-  const coupon = f.issue();
+  const coupon = await f.issue();
   const line = await bridge.dispatch('reserve', { code: coupon.code, checkoutId: uid(), eligibleCents: 1000, requestId: uid() });
   const draft = { id: uid(), orderNo: 'PROD-TEST-GUARD', method: '收钱吧',
     ...priceOrder([{ id: 'p', name: 'Product', price: 10, qty: 1, productType: 'sale' }, line]) };
   await assert.rejects(bridge.prepareDraft(draft, 'test'), /正式.*测试/);
-  assert.equal(f.call('coupon', { id: coupon.id }).state, 'RESERVED');
+  assert.equal((await f.call('coupon', { id: coupon.id })).state, 'RESERVED');
   await bridge.prepareDraft(draft, 'production');
-  assert.equal(f.call('coupon', { id: coupon.id }).state, 'PAYMENT_PENDING');
+  assert.equal((await f.call('coupon', { id: coupon.id })).state, 'PAYMENT_PENDING');
 });
 
 test('verified SQB payment survives a lost cloud commit response and reconciles after cashier restart without charging again', async t => {
-  const f = fixture(t); const adminToken = 'a'.repeat(64);
+  const f = await fixture(t); const adminToken = 'a'.repeat(64);
   const server = http.createServer(couponHttp(f.store, { adminToken }));
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => { server.closeAllConnections(); server.close(); });
@@ -212,7 +212,7 @@ test('verified SQB payment survives a lost cloud commit response and reconciles 
     assert.ok(parsed.pathname.endsWith('/purchase')); purchases++;
     const body = JSON.parse(options.body).request.body;
     assert.equal(Number(body.amount), 500);
-    const couponState = f.call('coupons').items[0].state;
+    const couponState = (await f.call('coupons')).items[0].state;
     assert.equal(couponState, 'PAYMENT_PENDING', 'Coupon must lock before moving money');
     const data = { ...body, order_sn: 'MOCK-PAID', order_type: 1, order_status: 4, tenders: [{ tender_sn: 'MOCK-T', amount: 500, pay_status: 3 }] };
     return new Response(signedEnvelope('response', { head: { appid: 'mock', sign_type: 'SHA256' }, body: { result_code: '200', biz_response: { result_code: '200', data } } }, platform.privateKey));
@@ -229,7 +229,7 @@ test('verified SQB payment survives a lost cloud commit response and reconciles 
   const draft = { id: uid(), orderNo: `POS${Date.now()}`, ...priceOrder([product, line]), method: '收钱吧' };
   const record = await service.dispatch('start', { draft, code: '130000000000000000', confirmTestPayment: true });
   assert.equal(record.state, 'paid'); assert.equal(purchases, 1);
-  assert.equal(f.call('coupon', { id: issued.id }).state, 'REDEEMED');
+  assert.equal((await f.call('coupon', { id: issued.id })).state, 'REDEEMED');
   const journal = JSON.parse(fs.readFileSync(path.join(directory, 'coupon-transactions.json'), 'utf8'));
   assert.equal(Object.values(journal)[0].finished, false);
   assert.match(Object.values(journal)[0].error, /同步未完成/);

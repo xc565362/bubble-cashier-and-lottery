@@ -10,6 +10,7 @@ const { safeMessage } = require('./diagnostics.cjs');
 const { createBackup, verifyBackup } = require('./backup.cjs');
 const { createCouponBridge } = require('../coupons/bridge.cjs');
 const { createLotteryBridge } = require('./lottery.cjs');
+const { createLotteryLocalBridge } = require('./lottery-local.cjs');
 const { createScarfBridge } = require('./scarf.cjs');
 const { canResolveMissingPayment } = require('./recovery.cjs');
 
@@ -50,7 +51,7 @@ function lockDirectory(directory) {
   return release;
 }
 
-function createService({ directory, protect = (value) => value, unprotect = (value) => value, fetchFn = fetch, resolveTerminalIp = createPublicIpResolver(fetchFn), exclusive = false }) {
+function createService({ directory, protect = (value) => value, unprotect = (value) => value, fetchFn = fetch, resolveTerminalIp = createPublicIpResolver(fetchFn), exclusive = false, storeNs = '' }) {
   const releaseDirectory = exclusive ? lockDirectory(directory) : null;
   const configFile = path.join(directory, 'config.json');
   const keyFile = path.join(directory, 'merchant-key.json');
@@ -62,8 +63,9 @@ function createService({ directory, protect = (value) => value, unprotect = (val
   let credentials = readJson(credentialFile, null);
   let config = credentials?.config || readJson(configFile, {});
   let records = readJson(journalFile, {});
-  const coupons = createCouponBridge({ directory, protect, unprotect, fetchFn, getPayment: id => records[id] });
+  const coupons = createCouponBridge({ directory, protect, unprotect, fetchFn, getPayment: id => records[id], storeNs });
   const lottery = createLotteryBridge({ directory, protect, unprotect, fetchFn });
+  const lotteryLocal = createLotteryLocalBridge({ directory, protect, unprotect, fetchFn });
   const scarf = createScarfBridge({ directory, protect, unprotect, fetchFn });
   let restoreStage = readJson(restoreFile, null);
   const inFlight = new Map();
@@ -184,6 +186,12 @@ function createService({ directory, protect = (value) => value, unprotect = (val
       if (action.startsWith('lottery-')) {
         if (!['lottery-config', 'lottery-snapshot', 'lottery-records'].includes(action) && (unresolved() || coupons.hasPending())) throw new Error('请先完成当前收退款和券占用，再修改抽奖配置');
         return lottery.dispatch(action.slice(8), payload);
+      }
+      if (action.startsWith('h5lottery-')) {
+        // Self-hosted lottery server (lottery/server.mjs). Reads stay available
+        // during unresolved checkout; connect/redeem follow the same guard.
+        if (!['h5lottery-config', 'h5lottery-records', 'h5lottery-lookup', 'h5lottery-export-csv'].includes(action) && (unresolved() || coupons.hasPending())) throw new Error('请先完成当前收退款和券占用，再操作抽奖服务');
+        return lotteryLocal.dispatch(action.slice(10), payload);
       }
       if (action.startsWith('coupon-')) {
         if (['coupon-connect', 'coupon-release', 'coupon-zero', 'coupon-reserve', 'coupon-bind-physical-products'].includes(action) && unresolved()) throw new Error('请先核对当前收退款，再操作优惠券');

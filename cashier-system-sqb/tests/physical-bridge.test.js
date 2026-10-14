@@ -7,10 +7,12 @@ import {createRequire} from 'node:module';
 import {priceOrder,completeOrder} from '../src/orderLogic.js';
 const require=createRequire(import.meta.url);
 const {createCouponBridge}=require('../coupons/bridge.cjs');
+const {createPosFixture}=require('./helpers/posfixture.cjs');
 const catalog=[['cap','BB250005','棒球帽'],['bucket','BB250003','渔夫帽'],['waist','BB240011','腰包'],['tote','BB260057','超大编织袋']].map(([id,sku,name])=>({id,sku,name,barcode:sku,productType:'sale',price:100,stock:2}));
 async function fixture(t,bind=true){
+  const pos=await createPosFixture(t);
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),'bubble-physical-bridge-'));
-  const bridges=[];const open=()=>{const b=createCouponBridge({directory});bridges.push(b);return b;};
+  const bridges=[];const open=()=>{const b=createCouponBridge({directory,storeNs:pos.ns});bridges.push(b);return b;};
   const bridge=open();t.after(()=>{for(const b of bridges)b.close();fs.rmSync(directory,{recursive:true,force:true});});
   const campaign=await bridge.dispatch('create-campaign',{requestId:'campaign',name:'棒球帽',kind:'physical',physical:{prizeId:'cap',quantity:1},amountCents:0,minimumCents:0,quota:10,startsAt:new Date(Date.now()-10000).toISOString(),expiresAt:new Date(Date.now()+86400000).toISOString()});
   const award=await bridge.dispatch('issue',{requestId:'award',campaignId:campaign.id,owner:'owner',awardId:'award',trustedCode:'AABBCCDDEEFF0011'});

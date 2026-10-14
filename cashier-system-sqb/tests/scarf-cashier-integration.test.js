@@ -76,7 +76,7 @@ test('losing participation stays used and cannot mint a redeemable coupon on ret
   const again = await f.call('draw', { inviteCode: invite.inviteCode }, USER);
   assert.equal(again.entry.outcome, 'lost');
   assert.equal(again.inventory.remaining, 200);
-  assert.equal(f.couponStore.dispatch(f.admin, 'coupons', {}).total, 0);
+  assert.equal((await f.couponStore.dispatch(f.admin, 'coupons', {})).total, 0);
 });
 
 test('a second computer matches scarf by SKU and rejects duplicates or exhausted local stock', async t => {
