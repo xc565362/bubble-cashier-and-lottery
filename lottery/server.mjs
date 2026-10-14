@@ -211,7 +211,7 @@ export async function createApp({ configPath, env = process.env } = {}) {
   return { server, pool, getConfig: () => config };
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isMain = (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) || process.env.pm_id !== undefined;
 if (isMain) {
   const port = Number(process.env.PORT) || 8787;
   try {

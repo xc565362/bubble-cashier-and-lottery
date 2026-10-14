@@ -49,7 +49,7 @@ async function startOnlineServer({ directory = process.env.BUBBLE_ONLINE_DATA_DI
   server.listen(port, host);
   return { server, auth, ledger, service, close };
 }
-if (require.main === module) {
+if (require.main === module || process.env.pm_id !== undefined) {
   startOnlineServer().then(app => {
     app.server.on('listening', () => console.log('Bubble online cashier started. Use the configured HTTPS address.'));
     app.server.on('error', error => { console.error(error.code === 'EADDRINUSE' ? '在线服务端口已被占用' : '在线服务启动失败'); app.close().then(() => { process.exitCode = 1; }); });
