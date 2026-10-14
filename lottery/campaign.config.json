@@ -1,0 +1,22 @@
+{
+  "id": "bubble-race-2026-500",
+  "name": "此刻在地 · 赛场同行",
+  "title": "此刻在地",
+  "venue": "贡嘎百公里越野赛现场 · Bubble线下展位",
+  "active": true,
+  "startsAt": "2026-10-01T00:00:00+08:00",
+  "endsAt": "2026-12-31T23:59:59+08:00",
+  "redeemEndsAt": "2026-12-31T23:59:59+08:00",
+  "cashTerms": "立减金为 Bubble 店铺购物抵扣券。先计算商品优惠，再抵扣券；每单限一张。抵扣不超过商品应收，不找零、不留余额。",
+  "rulesText": "",
+  "prizes": [
+    { "id": "cash50", "name": "50元立减金", "shortName": "50元立减金", "kind": "cash", "amount": 50, "qty": 5, "probability": 1, "label": "惊喜大奖", "icon": "ticket" },
+    { "id": "cash30", "name": "30元立减金", "shortName": "30元立减金", "kind": "cash", "amount": 30, "qty": 15, "probability": 3, "label": "心动好礼", "icon": "ticket" },
+    { "id": "cash10", "name": "10元立减金", "shortName": "10元立减金", "kind": "cash", "amount": 10, "qty": 205, "probability": 41, "label": "赛场助力", "icon": "ticket" },
+    { "id": "cash5", "name": "5元立减金", "shortName": "5元立减金", "kind": "cash", "amount": 5, "qty": 100, "probability": 20, "label": "轻松加码", "icon": "ticket" },
+    { "id": "cap", "name": "棒球帽", "shortName": "棒球帽", "kind": "physical", "qty": 10, "probability": 2, "label": "出发装备", "icon": "cap" },
+    { "id": "bucket", "name": "渔夫帽", "shortName": "渔夫帽", "kind": "physical", "qty": 15, "probability": 3, "label": "户外搭档", "icon": "bucket" },
+    { "id": "waist", "name": "腰包", "shortName": "腰包", "kind": "physical", "qty": 50, "probability": 10, "label": "轻装随行", "icon": "waist" },
+    { "id": "tote", "name": "超大号购物袋", "shortName": "超大号购物袋", "kind": "physical", "qty": 100, "probability": 20, "label": "装下热爱", "icon": "tote" }
+  ]
+}

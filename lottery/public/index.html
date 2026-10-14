@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ff652e">
+  <meta name="referrer" content="no-referrer">
+  <title>Bubble · 赛场同行</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='8' fill='%23ff652e'/%3E%3Ctext x='20' y='30' text-anchor='middle' fill='%23fff9e7' font-family='Arial' font-size='30' font-weight='900' font-style='italic'%3EB%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./runtime-config.js"></script>
+  <script defer src="./vendor/qrcode.js"></script>
+  <script defer src="./vendor/jsbarcode.js"></script>
+  <script defer src="./vendor/barcode.js"></script>
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <div id="preview-banner" class="preview-banner" hidden>互动预览 · 演示奖品不可抵扣或领取</div>
+    <header class="brand"><span class="wordmark">Bubble</span><span class="name">赛事好礼</span><span class="right">为热爱而行</span></header>
+    <div id="offline-banner" class="offline-banner" role="status" hidden>连接已中断，领取凭证暂时隐藏。恢复连接后将重新确认。</div>
+    <main id="main" class="screen" tabindex="-1"><p class="loading">正在加载活动…</p></main>
+    <nav class="nav" aria-label="活动导航">
+      <a class="item" href="#/home" data-page="home"><span class="icon" aria-hidden="true">✧</span><span>抽好礼</span></a>
+      <a class="item" href="#/prize" data-page="prize"><span class="icon" aria-hidden="true">♧</span><span>我的奖品</span></a>
+      <a class="item" href="#/rules" data-page="rules"><span class="icon" aria-hidden="true">☷</span><span>活动规则</span></a>
+    </nav>
+  </div>
+  <dialog id="modal" class="modal" aria-labelledby="modal-title"></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <noscript><p>请启用 JavaScript 后打开活动页面。</p></noscript>
+</body>
+</html>

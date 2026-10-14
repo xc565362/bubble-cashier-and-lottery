@@ -1,0 +1,17 @@
+{
+  "name": "bubble-lottery",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Bubble 微信抽奖活动：自托管后端（MySQL + mysql2）+ H5",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env.local server.mjs",
+    "test": "node --env-file-if-exists=.env.local --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "mysql2": "^3.24.6"
+  }
+}
