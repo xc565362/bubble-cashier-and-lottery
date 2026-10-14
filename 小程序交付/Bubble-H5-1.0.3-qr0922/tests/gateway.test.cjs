@@ -17,7 +17,7 @@ function fixture(overrides = {}) {
   const options = {config: {...config}, now: () => time,
     exchangeCode: async code => {exchanged.push(code); return openId;},
     callLottery: async (action, payload, identity) => {called.push({action, payload, identity}); return {safe: true};},
-    consumeRate: async (...args) => {rates.push(args);}, ...overrides};
+    consumeCode: async () => {}, consumeRate: async (...args) => {rates.push(args);}, ...overrides};
   const handler = createGateway(options);
   async function login() { return decoded(await handler(event('/session', {code: 'testcode12345'}))); }
   async function request(action, payload = {}, token) {

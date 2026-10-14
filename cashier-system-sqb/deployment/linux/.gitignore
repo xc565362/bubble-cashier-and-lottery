@@ -1,0 +1,28 @@
+# Generated release directories and current/historical release metadata.
+stage-*/
+online-dist/
+verification-dist/
+cashier-release-state*.json
+
+# This source-tool directory has no authored JSON; generated reports/manifests stay private.
+*.json
+*.jsonl
+*.tar
+*.gz
+*.zip
+*.log
+*.png
+*.jpg
+*.mp4
+*.sqlite*
+*.db*
+*.key
+*.pem
+*.env
+.env*
+*.witness/
+private-state*
+output/
+reports/
+evidence/
+backups/

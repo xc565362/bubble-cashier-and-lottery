@@ -16,7 +16,8 @@ function rulesText(value){
 }
 function time(value){if(value==null||value==='')return null;const v=typeof value==='string'?Date.parse(value):value;if(!Number.isSafeInteger(v)||v<=0)fail('INVALID_TIME','活动时间不正确');return v;}
 const validTimes=c=>Number.isSafeInteger(c.startsAt)&&Number.isSafeInteger(c.endsAt)&&Number.isSafeInteger(c.redeemEndsAt)&&c.startsAt>0&&c.startsAt<c.endsAt&&c.endsAt<=c.redeemEndsAt;
-function createManagementService({store,center,now=Date.now}) {
+function createManagementService({store,center,key,now=Date.now}) {
+  const records=require('./draw-records.cjs').createDrawRecords({readPage:store.readEntries,campaignId:CAMPAIGN_ID,mode:'scarf',key,center,now});
   async function read(tx){return {campaign:await tx.get(COLLECTIONS.campaigns,CAMPAIGN_ID),inventory:await tx.get(COLLECTIONS.inventory,CAMPAIGN_ID)};}
   const defaults=()=>({total:TOTAL_STOCK,remaining:TOTAL_STOCK,awarded:0,redeemed:0,legacyRedeemed:0});
   async function snapshot(input){
@@ -29,9 +30,10 @@ function createManagementService({store,center,now=Date.now}) {
       const history=campaign?.centerHistory||[];
       if(history.length&&center.redeemed)redeemed=(inventory?.legacyRedeemed||0)+await center.redeemed(history);
     }catch{ready=false;}
-    return {service:'bubble-scarf-management',version:1,capabilities:['rules-text-v1'],campaignId:CAMPAIGN_ID,revision:campaign?.revision||0,campaign:publicCampaign(campaign),prize:campaign?.prize||{...PRIZE,product:null},inventory:{total:inventory?.total??TOTAL_STOCK,remaining:inventory?.remaining??TOTAL_STOCK,awarded:inventory?.awarded||0,redeemed},fulfillment:{ready,centerId:center?.centerId||'',environment:center?.environment||''},audit:campaign?.audit||[]};
+    return {service:'bubble-scarf-management',version:1,capabilities:['rules-text-v1',...(typeof store.readEntries==='function'?['draw-records-v1']:[])],campaignId:CAMPAIGN_ID,revision:campaign?.revision||0,campaign:publicCampaign(campaign),prize:campaign?.prize||{...PRIZE,product:null},inventory:{total:inventory?.total??TOTAL_STOCK,remaining:inventory?.remaining??TOTAL_STOCK,awarded:inventory?.awarded||0,redeemed},fulfillment:{ready,centerId:center?.centerId||'',environment:center?.environment||''},audit:campaign?.audit||[]};
   }
   return async function management(action,payload={}){
+    if(action==='records')return records(payload);
     if(action==='snapshot'){if(!only(payload,[]))fail('INVALID_REQUEST','请求参数无效');return snapshot();}
     if(action!=='update')fail('INVALID_ACTION','不支持此管理操作');
     if(!only(payload,['revision','requestId','operation','reason','campaign','prize','total'])||!Number.isSafeInteger(payload.revision)||payload.revision<0||typeof payload.requestId!=='string'||!/^[A-Za-z0-9_-]{8,100}$/.test(payload.requestId)||!['pause','resume','configure'].includes(payload.operation))fail('INVALID_REQUEST','修改请求不正确');
@@ -115,7 +117,7 @@ function createManagementService({store,center,now=Date.now}) {
 }
 function createManagementHttp({store,key,center,now=Date.now}){
   if(!/^[a-f0-9]{64}$/.test(key||''))fail('INVALID_CONFIG','头巾管理密钥尚未配置',503);
-  const call=createManagementService({store,center,now});
+  const call=createManagementService({store,center,key,now});
   return async event=>{
     const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
     try{

@@ -1,0 +1,3 @@
+.demo{height:44rpx;line-height:44rpx;text-align:center;font-size:17rpx;color:#69402d;background:#fff9e7;letter-spacing:1rpx}.brand{height:89rpx;display:flex;align-items:center;padding:0 40rpx;background:#fff9e7;gap:24rpx}.wordmark{font-family:Arial,sans-serif;font-size:44rpx;font-weight:900;font-style:italic;letter-spacing:-3rpx}.name{font-size:20rpx;color:#69402d;border-left:1rpx solid #e9bb98;padding-left:24rpx}.right{margin-left:auto;font-size:18rpx;color:#69402d;letter-spacing:3rpx}
+
+.demo{background:#b93010;color:#fff9e7}.brand{background:#fff9e7;color:#a52d10}.name{color:#69402d}.right{color:#a52d10}

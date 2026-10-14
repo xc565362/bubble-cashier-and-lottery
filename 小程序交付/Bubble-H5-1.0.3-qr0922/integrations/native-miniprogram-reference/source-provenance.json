@@ -1,0 +1,25 @@
+{
+  "packagedAt": "2026-09-22T06:54:20.405Z",
+  "nativeVersion": "1.0.2",
+  "appId": "wx3cfec968f30fb6c1",
+  "cloudEnv": "bubble-lottery-500-d8cd9c6a45992",
+  "frontendSnapshot": "bubble-ui-release-1.0.2-20260921/project",
+  "frontendEvidence": "2026-09-21 official CI upload succeeded; user confirmed publication and refreshed display.",
+  "cloudSnapshot": "bubble-activity-code-diagnostics-20260921/cloudfunctions/lottery",
+  "cloudEvidence": "2026-09-21 deployment recorded in bubble-release-500-20260921/release-status.json; activity-code generation succeeded afterwards.",
+  "sourceFileCounts": {
+    "frontend": 57,
+    "cloud": 10
+  },
+  "sourceHashesVerified": true,
+  "projectMetadataChanges": [
+    "Added cloudfunctionRoot for developer-tool import",
+    "Changed local projectname only"
+  ],
+  "includesSecrets": false,
+  "includesProductionData": false,
+  "includesDynamicAdmin": false,
+  "includesPhysicalPosUpgrade": false,
+  "liveCodeDownloadedDuringThisPackaging": false,
+  "productionChanged": false
+}

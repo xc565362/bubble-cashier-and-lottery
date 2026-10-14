@@ -42,13 +42,16 @@ function lockDirectory(directory) {
     fs.unlinkSync(file);
     return lockDirectory(directory);
   }
-  process.once('exit', () => {
+  const release = () => {
     if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === String(process.pid)) fs.unlinkSync(file);
-  });
+    process.removeListener('exit', release);
+  };
+  process.once('exit', release);
+  return release;
 }
 
 function createService({ directory, protect = (value) => value, unprotect = (value) => value, fetchFn = fetch, resolveTerminalIp = createPublicIpResolver(fetchFn), exclusive = false }) {
-  if (exclusive) lockDirectory(directory);
+  const releaseDirectory = exclusive ? lockDirectory(directory) : null;
   const configFile = path.join(directory, 'config.json');
   const keyFile = path.join(directory, 'merchant-key.json');
   const journalFile = path.join(directory, 'payments.json');
@@ -175,11 +178,11 @@ function createService({ directory, protect = (value) => value, unprotect = (val
   return {
     async dispatch(action, payload = {}) {
       if (action.startsWith('scarf-')) {
-        if (!['scarf-config', 'scarf-snapshot'].includes(action) && (unresolved() || coupons.hasPending())) throw new Error('请先完成当前收退款和券占用，再修改头巾活动配置');
+        if (!['scarf-config', 'scarf-snapshot', 'scarf-records'].includes(action) && (unresolved() || coupons.hasPending())) throw new Error('请先完成当前收退款和券占用，再修改头巾活动配置');
         return scarf.dispatch(action.slice(6), payload);
       }
       if (action.startsWith('lottery-')) {
-        if (!['lottery-config', 'lottery-snapshot'].includes(action) && (unresolved() || coupons.hasPending())) throw new Error('请先完成当前收退款和券占用，再修改抽奖配置');
+        if (!['lottery-config', 'lottery-snapshot', 'lottery-records'].includes(action) && (unresolved() || coupons.hasPending())) throw new Error('请先完成当前收退款和券占用，再修改抽奖配置');
         return lottery.dispatch(action.slice(8), payload);
       }
       if (action.startsWith('coupon-')) {
@@ -426,7 +429,9 @@ function createService({ directory, protect = (value) => value, unprotect = (val
       await coupons.settle(result).catch(() => null);
       return signedEnvelope('response', { head: { version: '1.0.0', sign_type: 'SHA256', appid: config.appid, response_time: new Date().toISOString().replace(/\.\d{3}Z$/, '+00:00') }, body: { result_code: '200', biz_response: { result_code: '200' } } }, privateKey());
     },
-    close: () => coupons.close(),
+    // Server-internal recovery access. Never expose journal/staged backups as a dispatch action.
+    readOnlineState: () => structuredClone({ records: Object.values(records), restoreStage, couponRecords: coupons.readOnlineState() }),
+    close: () => { coupons.close(); releaseDirectory?.(); },
   };
 }
 

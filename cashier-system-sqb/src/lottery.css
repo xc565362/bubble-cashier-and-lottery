@@ -64,6 +64,18 @@
 .activityRulesPreview { margin-top: 12px; padding: 14px; border-radius: 6px; background: #f3f7f5; }
 .activityRulesPreview strong { font-size: 13px; }
 .activityRulesPreview p { margin: 8px 0 0; font-size: 14px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.lotteryRecords { margin: 22px 0; padding: 20px 0; border-top: 1px solid #d8e2dc; border-bottom: 1px solid #d8e2dc; }
+.lotteryRecords h3 { margin: 0; }
+.lotteryRecords .lotteryHelp { margin: 8px 0; }
+.lotteryRecordFilters { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; margin: 12px 0; color: #536a62; font-size: 13px; }
+.lotteryRecordFilters label { display: grid; gap: 6px; min-width: 150px; }
+.lotteryRecordFilters select { min-height: 38px; border: 1px solid #bacdc3; border-radius: 6px; padding: 6px 10px; background: #fff; color: #243e33; }
+.lotteryRecordsTable td { vertical-align: top; min-width: 130px; }
+.lotteryRecordsTable small, .lotteryRecordsTable code { display: block; margin-top: 6px; max-width: 220px; overflow-wrap: anywhere; white-space: normal; font-size: 12px; color: #536a62; }
+.lotteryRecordsTable code { font-family: ui-monospace, monospace; }
+.lotteryRecordsTable .drawResult.won { color: #0f766e; }
+.lotteryRecordsTable .drawResult.lost { color: #536a62; }
+.lotteryRecordPagination { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
 @media (max-width: 600px) {
   .lotteryHeading { align-items: flex-start; flex-direction: column; }
   .lotteryHeading strong { font-size: 16px; }

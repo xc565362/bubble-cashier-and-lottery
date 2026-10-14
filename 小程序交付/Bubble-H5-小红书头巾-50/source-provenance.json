@@ -1,0 +1,32 @@
+{
+  "derivedFrom": "1.0.3-qr0922 H5",
+  "sourceDirectory": "D:/2、bubble/线下/收银系统/小程序交付/Bubble-H5-1.0.3-qr0922",
+  "newActivity": "山野有约",
+  "activityId": "scarf-xhs-50-v1",
+  "totalStock": 200,
+  "probability": 0.5,
+  "createdAt": "2026-09-29T11:28:08.992Z",
+  "productionChanged": false,
+  "reusedFiles": [
+    {
+      "path": "public/api.mjs",
+      "sha256": "9b109ee43a28ebc6669e35a5395c5a34a09255199bf710b4b3c9a660852dfbe0",
+      "matchesSource": true
+    },
+    {
+      "path": "public/qr.mjs",
+      "sha256": "476a3c4069937a205152881113e0b1ba01711578fcfeabed5cad92e8b7825388",
+      "matchesSource": true
+    },
+    {
+      "path": "public/vendor/qrcode.js",
+      "sha256": "18ae399f81182bc9de916e9c77b195df20cc58d6f2d55a62b085a299f1bf1780",
+      "matchesSource": true
+    },
+    {
+      "path": "public/vendor/jsbarcode.js",
+      "sha256": "2a123d7b59d76af3544043246df76b463a18226a2beea53e1e1b6bdd9d00c7b8",
+      "matchesSource": true
+    }
+  ]
+}

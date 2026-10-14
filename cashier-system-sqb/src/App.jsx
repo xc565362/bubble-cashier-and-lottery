@@ -41,6 +41,8 @@ import { AfterSalesModal } from './AfterSalesModal.jsx';
 import { applyAdjustment, validateAdjustmentStock, remainingLines, financialEvents, financialExportRows, orderNet, orderDisplayStatus, channelName, transactionTime, tenderTotals } from './afterSales.js';
 import { createLedgerSearchIndex, queryLedger, LEDGER_SEARCH_FIELDS, LEDGER_SEARCH_GROUPS } from './ledgerSearch.js';
 import { completeBrowserPayment, paymentReviewMessage, retainPaymentReview, shouldOpenPayment } from './paymentReview.js';
+import { OnlineGate, OnlineAccountPage } from './OnlineGate.jsx';
+import { onlineRequest } from './onlineApi.js';
 
 const PRODUCT_KEY = 'stall_cashier_products_v2';
 const LEGACY_PRODUCT_KEY = 'stall_cashier_products_v1';
@@ -48,12 +50,6 @@ const ORDER_KEY = 'stall_cashier_orders_v1';
 const PAYMENT_QR_KEY = 'stall_cashier_payment_qr_v1';
 const PROMO_RULE_KEY = 'stall_cashier_promo_rules_v1';
 const LEDGER_KEY = 'stall_cashier_ledger_v2';
-
-if ('serviceWorker' in navigator && /^https?:$/.test(window.location.protocol)) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
-  });
-}
 
 const starterProducts = [
   {
@@ -355,13 +351,23 @@ function mergeProducts(current, incoming) {
   return next;
 }
 
-function App() {
-  const [ledger, setLedger] = useState(() => readStore(LEDGER_KEY, null) || {
+function App({ online = null }) {
+  useEffect(() => {
+    if (!online && 'serviceWorker' in navigator && /^https?:$/.test(window.location.protocol)) navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }, []);
+  const [ledger, setLedger] = useState(() => online ? online.initial.ledger : readStore(LEDGER_KEY, null) || {
     products: readInitialProducts(), orders: readStore(ORDER_KEY, []), heldCarts: [],
   });
   const ledgerRef = useRef(ledger);
+  const cloudRevision = useRef(online?.initial.revision);
+  const [lease, setLease] = useState(online?.initial.lease || null);
+  const leaseRef = useRef(lease);
+  const [cloudBusy, setCloudBusy] = useState(false), [cloudError, setCloudError] = useState('');
+  const [cloudSyncRequired, setCloudSyncRequired] = useState(false);
+  const cloudWorking = useRef(false), cloudRequest = useRef(null);
   const { products, orders, heldCarts = [] } = ledger;
   function saveLedger(next, silent = false) {
+    if (online) { if (!silent) flash('在线账务必须由云端核对保存，请刷新后重试'); return false; }
     try {
       // Inventory, orders and held baskets are committed in one storage write.
       localStorage.setItem(LEDGER_KEY, JSON.stringify(next));
@@ -378,8 +384,8 @@ function App() {
     if (current.pendingPayment?.review) { flash('当前收款数据待核对，暂不能修改商品或库存'); return false; }
     return saveLedger({ ...current, products: typeof update === 'function' ? update(current.products) : update });
   }
-  const [paymentQr, setPaymentQr] = useState(() => ledger.paymentQr ?? localStorage.getItem(PAYMENT_QR_KEY) ?? '');
-  const [promoRules, setPromoRules] = useState(() => normalizePromoRules(ledger.promoRules ?? readStore(PROMO_RULE_KEY, [])));
+  const [paymentQr, setPaymentQr] = useState(() => ledger.paymentQr ?? (online ? '' : localStorage.getItem(PAYMENT_QR_KEY)) ?? '');
+  const [promoRules, setPromoRules] = useState(() => normalizePromoRules(ledger.promoRules ?? (online ? [] : readStore(PROMO_RULE_KEY, []))));
   const [cart, setCart] = useState([]);
   const [giftChoiceQueue, setGiftChoiceQueue] = useState([]);
   const [giftChoicePanelOpen, setGiftChoicePanelOpen] = useState(false);
@@ -407,29 +413,95 @@ function App() {
   const [toast, setToast] = useState('');
   const [editingProduct, setEditingProduct] = useState(null);
   const [paymentOrder, setPaymentOrder] = useState(null);
+  const paymentOrderRef = useRef(null); paymentOrderRef.current = paymentOrder;
   const [editingOrder, setEditingOrder] = useState(null);
   const [heldPanelOpen, setHeldPanelOpen] = useState(false);
   const [sqbSettingsOpen, setSqbSettingsOpen] = useState(false);
-  const [sqbOrder, setSqbOrder] = useState(() => shouldOpenPayment(ledger.pendingPayment) ? ledger.pendingPayment.draft : null);
-  const [afterSalesOrder, setAfterSalesOrder] = useState(() => ledger.pendingAdjustment ? { order: ledger.orders.find((item) => item.id === ledger.pendingAdjustment.parentId), type: ledger.pendingAdjustment.request.type } : null);
+  const [sqbOrder, setSqbOrder] = useState(() => (!online || online.initial.lease?.mine) && shouldOpenPayment(ledger.pendingPayment) ? ledger.pendingPayment.draft : null);
+  const sqbOrderRef = useRef(null); sqbOrderRef.current = sqbOrder;
+  const [afterSalesOrder, setAfterSalesOrder] = useState(() => (!online || online.initial.lease?.mine) && ledger.pendingAdjustment ? { order: ledger.orders.find((item) => item.id === ledger.pendingAdjustment.parentId), type: ledger.pendingAdjustment.request.type } : null);
   const [recoveryMessage, setRecoveryMessage] = useState('');
   const [lastResult, setLastResult] = useState('');
   const [backupBusy, setBackupBusy] = useState(false);
   const backupWorking = useRef(false);
   const [restoreReady, setRestoreReady] = useState(!ledger.pendingRestore);
-  const [startupReady, setStartupReady] = useState(false);
+  const [startupReady, setStartupReady] = useState(Boolean(online));
   const pendingPayment = ledger.pendingPayment;
   const pendingAdjustment = ledger.pendingAdjustment;
   const [couponBusy, setCouponBusy] = useState(false);
   const [couponRecovery, setCouponRecovery] = useState(false);
   const couponWorking = useRef(false);
-  const financiallyLocked = Boolean(pendingPayment || pendingAdjustment || !restoreReady || !startupReady || backupBusy || couponBusy || couponRecovery);
+  const onlineLocked = Boolean(online && (!lease?.mine || cloudBusy || cloudSyncRequired || ledger.pendingZero || ledger.pendingCouponReservation || lease.recoveryRequired));
+  const financiallyLocked = Boolean(onlineLocked || pendingPayment || pendingAdjustment || !restoreReady || !startupReady || backupBusy || couponBusy || couponRecovery);
   const reviewingPayment = Boolean(pendingPayment?.review && pendingPayment.record?.state === 'paid' && !sqbOrder
     && !pendingAdjustment && restoreReady && startupReady && !backupBusy && !couponBusy && !couponRecovery);
   const recovering = useRef(false);
 
+  function acceptCloud(snapshot) {
+    if (!snapshot?.ledger || !Number.isSafeInteger(snapshot.revision)) throw new Error('云端账本格式异常，请重试连接');
+    cloudRevision.current = snapshot.revision;
+    ledgerRef.current = snapshot.ledger; setLedger(snapshot.ledger);
+    leaseRef.current = snapshot.lease; setLease(snapshot.lease);
+    setPaymentQr(snapshot.ledger.paymentQr || ''); setPromoRules(normalizePromoRules(snapshot.ledger.promoRules || []));
+    setRestoreReady(!snapshot.ledger.pendingRestore); setStartupReady(true);
+    setCloudSyncRequired(false);
+    if (!snapshot.lease?.mine) { setSqbOrder(null); setAfterSalesOrder(null); setEditingProduct(null); setEditingOrder(null); }
+    return snapshot;
+  }
+  async function cloudCommand(type, payload = {}) {
+    if (cloudWorking.current) throw new Error('云端操作正在保存，请稍候');
+    if (!leaseRef.current?.mine) throw new Error('请先取得收银权限，再修改云端账务');
+    cloudWorking.current = true; setCloudBusy(true); setCloudError('');
+    const input = { type, payload, expectedRevision: cloudRevision.current };
+    const fingerprint = JSON.stringify(input);
+    if (cloudRequest.current?.fingerprint !== fingerprint) cloudRequest.current = { fingerprint, requestId: crypto.randomUUID() };
+    try { return acceptCloud(await onlineRequest('command', { method: 'POST', body: { ...input, requestId: cloudRequest.current.requestId } })); }
+    catch (issue) { setCloudError(issue.status === 409 ? `${issue.message}。请刷新云端数据后核对，未保存内容仍保留。` : issue.message); throw issue; }
+    finally { cloudWorking.current = false; setCloudBusy(false); }
+  }
+  async function saveCloud(type, payload) {
+    try { return await cloudCommand(type, payload); } catch (issue) { flash(issue.message); return null; }
+  }
+  async function refreshCloud() {
+    if (cloudWorking.current || couponWorking.current) return;
+    if ((editingProduct || editingOrder) && !window.confirm('刷新会关闭尚未保存的商品或订单编辑，重新读取云端资料。确认刷新吗？')) return;
+    cloudWorking.current = true; setCloudBusy(true); setCloudError('');
+    try { acceptCloud(await onlineRequest('ledger')); setEditingProduct(null); setEditingOrder(null); }
+    catch (issue) { setCloudError(issue.message); }
+    finally { cloudWorking.current = false; setCloudBusy(false); }
+  }
+  async function changeLease(action, takeover = false) {
+    if (cloudWorking.current || couponWorking.current) return;
+    if (takeover && !window.confirm('确认接管当前收银台？原终端将不能继续入账。取得权限后，请先核对云端未完成交易，勿重复收退款。')) return;
+    cloudWorking.current = true; setCloudBusy(true); setCloudError('');
+    try { acceptCloud(await onlineRequest(`lease/${action}`, { method: 'POST', body: action === 'acquire' ? { takeover } : {} })); setEditingProduct(null); setEditingOrder(null); }
+    catch (issue) { setCloudError(issue.message); }
+    finally { cloudWorking.current = false; setCloudBusy(false); }
+    if (leaseRef.current?.mine) await recoverTransactions();
+  }
+
   async function recoverTransactions() {
     if (recovering.current || backupWorking.current || couponWorking.current) return;
+    if (online) {
+      if (!leaseRef.current?.mine || cloudWorking.current) return;
+      recovering.current = true;
+      try {
+        const previous = ledgerRef.current;
+        const snapshot = await cloudCommand('recovery');
+        const current = snapshot.ledger;
+        const recoveringIds = [previous.pendingPayment?.draft.id, previous.pendingZero?.draft.id, paymentOrderRef.current?.id, sqbOrderRef.current?.id].filter(Boolean);
+        if (current.orders.some(order => recoveringIds.includes(order.id))) {
+          clearCart(); setPaymentOrder(null); setSqbOrder(null); setLastResult('云端订单已恢复，库存已核对；请勿重复收款');
+        }
+        if (shouldOpenPayment(current.pendingPayment)) setSqbOrder(current.pendingPayment.draft);
+        else if (previous.pendingPayment && !current.pendingPayment) setSqbOrder(null);
+        if (current.pendingAdjustment) setAfterSalesOrder({ order: current.orders.find(item => item.id === current.pendingAdjustment.parentId), type: current.pendingAdjustment.request.type });
+        else if (previous.pendingAdjustment && !current.pendingAdjustment) setAfterSalesOrder(null);
+        setRecoveryMessage(snapshot.recoveryRequired ? '云端仍有待处理交易，请核对后继续收银' : '');
+      } catch (issue) { setRecoveryMessage(issue.message); }
+      finally { recovering.current = false; }
+      return;
+    }
     recovering.current = true;
     try {
       const stage = await sqbCall('restore-status');
@@ -497,6 +569,17 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!online) return;
+    const timer = setInterval(async () => {
+      if (!leaseRef.current?.mine || cloudWorking.current) return;
+      try { const snapshot = await onlineRequest('lease/acquire', { method: 'POST', body: { takeover: false } }); leaseRef.current = snapshot.lease; setLease(snapshot.lease); }
+      catch (issue) { leaseRef.current = { ...leaseRef.current, mine: false }; setLease(leaseRef.current); setCloudError(`收银权限未能续期：${issue.message}。请重新取得权限并核对未完成交易。`); setSqbOrder(null); setAfterSalesOrder(null); setEditingProduct(null); setEditingOrder(null); }
+    }, 20000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (online) return;
     if (ledgerRef.current.paymentQr !== paymentQr || JSON.stringify(ledgerRef.current.promoRules) !== JSON.stringify(promoRules)) {
       saveLedger({ ...ledgerRef.current, paymentQr, promoRules });
     }
@@ -672,6 +755,7 @@ function App() {
       if (cart.some(item => isCoupon(item) || isExternalAward(item))) { flash('每单仅能使用一份抽奖奖品或优惠券，请先移除已有奖品'); return; }
       if (!physicalCode && (!cart.some(item => !isCoupon(item)) || priceOrder(cart).total <= 0)) { flash('请先加入需要付款的商品，再扫描中奖券'); return; }
       couponWorking.current = true; setCouponBusy(true);
+      if (online) setCloudSyncRequired(true);
       try {
         const inventory = physicalCode ? ledgerRef.current.products.map(({ id, name, sku, barcode, productType, price, originalPrice, stock, group }) => ({ id, name, sku, barcode, productType, price, originalPrice, stock, group })) : undefined;
         const line = await sqbCall('coupon-reserve', { code: physicalCode ? normalized.toUpperCase() : normalized, checkoutId: crypto.randomUUID(), eligibleCents: cart.length ? Math.round(priceOrder(cart).total * 100) : 0, requestId: crypto.randomUUID(), products: inventory });
@@ -680,7 +764,13 @@ function App() {
         setCart(current => [...current, line]); setBarcodeInput('');
         flash(isExternalPhysical(line) ? `${line.name} · 抽奖赠品已加入，免费 1 件` : `中奖券已加入，最多抵扣 ${line.couponAmount.toFixed(2)} 元`);
       } catch (error) { flash(error.message); }
-      finally { couponWorking.current = false; setCouponBusy(false); }
+      finally {
+        if (online) {
+          try { acceptCloud(await onlineRequest('ledger')); }
+          catch (issue) { setCloudError(`领奖券状态需要核对：${issue.message}。请刷新云端数据后再继续，勿重复扫码。`); }
+        }
+        couponWorking.current = false; setCouponBusy(false);
+      }
       return;
     }
     const matches = products.filter((item) => item.barcode === normalized);
@@ -831,6 +921,11 @@ function App() {
     if (financiallyLocked) { flash('请先核对待处理收款'); return; }
     if (!paymentOrder || couponWorking.current) return;
     const external = paymentOrder.items.some(item => item.externalCoupon);
+    if (online) {
+      const result = await saveCloud(external ? 'zero-complete' : 'manual-complete', { draft: paymentOrder });
+      if (result) { setPaymentOrder(null); clearCart(); flash(external ? '云端已核销并保存订单，可发放奖品' : '云端订单已保存，库存已更新'); }
+      return;
+    }
     if (external) { couponWorking.current = true; setCouponBusy(true); setCouponRecovery(true); }
     try {
       const result = external ? await sqbCall('coupon-zero', { draft: paymentOrder }) : null;
@@ -843,8 +938,9 @@ function App() {
     finally { couponWorking.current = false; setCouponBusy(false); if (external) recoverTransactions(); }
   }
 
-  function beforeSqbStart() {
+  async function beforeSqbStart() {
     try {
+      if (online) return Boolean(await saveCloud('payment-prepare', { draft: sqbOrder }));
       if (ledgerRef.current.pendingPayment || ledgerRef.current.pendingAdjustment) throw new Error('请先核对待处理收退款');
       reconcileStock(ledgerRef.current.products, [], sqbOrder.items);
       return saveLedger({ ...ledgerRef.current, pendingPayment: { draft: sqbOrder, started: true } });
@@ -852,6 +948,7 @@ function App() {
   }
 
   async function syncPhysicalOrder(orderId) {
+    if (online) { const result = await saveCloud('physical-sync', { orderId }); return Boolean(result?.ledger.orders.find(order => order.id === orderId)?.physicalFulfilled); }
     try { const status = await sqbCall('coupon-fulfilment',{orderId});
       if (!status.redeemed) return false;
       return saveLedger({...ledgerRef.current,orders:ledgerRef.current.orders.map(o => o.id === orderId ? {...o,physicalFulfilled:true} : o)},true);
@@ -860,6 +957,17 @@ function App() {
 
   async function applySqbRecord(record) {
     if (record.state !== 'paid') return;
+    if (online) {
+      const snapshot = await cloudCommand('payment-sync', { id: record.id });
+      clearCart(); setSqbOrder(null); flash('云端已确认收款，订单和库存已保存');
+      setLastResult(`收款成功 ${(record.amount / 100).toFixed(2)} 元 · 云端订单已保存`);
+      await notifyConfirmedPayment(record.id);
+      if (snapshot.ledger.orders.find(order => order.id === record.id)?.items.some(isExternalPhysical)) {
+        const ready = await syncPhysicalOrder(record.id);
+        setLastResult(ready ? '收款及奖品核销已完成，可发放实物奖品' : '收款已成功 · 实物奖品领取确认待同步，请暂缓发放');
+      }
+      return;
+    }
     try {
       const next = completeBrowserPayment(ledgerRef.current, record);
       if (!saveLedger(next, true)) throw new Error('收款已成功但订单保存失败，请勿重复收款，请重试保存');
@@ -882,6 +990,19 @@ function App() {
   }
 
   async function closeSqb(record) {
+    if (online) {
+      if (record?.state === 'paid') {
+        if (!ledgerRef.current.orders.some(order => order.id === record.id)) await cloudCommand('payment-review', { id: record.id, dismissed: true });
+        setSqbOrder(null); return;
+      }
+      if (ledgerRef.current.pendingPayment && !['failed', 'not-started'].includes(record?.state)) return;
+      if (ledgerRef.current.pendingPayment) {
+        const draft = ledgerRef.current.pendingPayment.draft;
+        await cloudCommand('payment-clear', { id: draft.id });
+        setCart(draft.items.filter(item => !item.externalCoupon));
+      }
+      setSqbOrder(null); return;
+    }
     if (record?.state === 'paid') {
       const current = ledgerRef.current;
       if (!current.pendingPayment && current.orders.some(order => order.id === record.id && order.payment?.orderSn === record.orderSn)) {
@@ -918,23 +1039,26 @@ function App() {
     setCart(priced.items);
   }
 
-  function holdCart() {
+  async function holdCart() {
+    if (online && giftChoiceQueue.length) { flash('请先完成赠品选择，再挂单'); return false; }
     if (cart.some(item => item.externalCoupon)) { flash('请先移除中奖券再挂单，取单后可重新扫码'); return false; }
     if (!cart.length) { flash('购物车还是空的'); return false; }
     const held = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), items: cart, giftChoiceQueue };
     const current = ledgerRef.current;
-    if (!saveLedger(suspendBasket(current, held))) return false;
+    if (online ? !await saveCloud('hold', { basket: held }) : !saveLedger(suspendBasket(current, held))) return false;
     clearCart();
     flash('已挂起，可继续为下一位顾客收银');
     return true;
   }
 
-  function resumeCart(id) {
+  async function resumeCart(id) {
     if (cart.some(item => item.externalCoupon)) { flash('请先移除当前中奖券，再取单'); return; }
     const current = ledgerRef.current;
     if (!current.heldCarts.some((entry) => entry.id === id)) return;
-    const { ledger: next, basket: held } = retrieveBasket(current, id, { id: crypto.randomUUID(), createdAt: new Date().toISOString(), items: cart, giftChoiceQueue });
-    if (!saveLedger(next)) return;
+    const currentBasket = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), items: cart, giftChoiceQueue };
+    let held;
+    if (online) { const result = await saveCloud('retrieve', { id, currentBasket }); if (!result) return; held = result.extra.basket; }
+    else { const result = retrieveBasket(current, id, currentBasket); if (!saveLedger(result.ledger)) return; held = result.basket; }
     setCart(held.items);
     setGiftChoiceQueue(held.giftChoiceQueue || []);
     setGiftChoicePanelOpen(Boolean(held.giftChoiceQueue?.length));
@@ -942,17 +1066,19 @@ function App() {
     flash(cart.length ? '已取单，原购物车已自动挂起' : '已取单');
   }
 
-  function deleteHeldCart(id) {
+  async function deleteHeldCart(id) {
     if (!window.confirm('确定删除这笔挂单吗？')) return;
     const current = ledgerRef.current;
-    saveLedger({ ...current, heldCarts: current.heldCarts.filter((entry) => entry.id !== id) });
+    if (online) await saveCloud('held-delete', { id });
+    else saveLedger({ ...current, heldCarts: current.heldCarts.filter((entry) => entry.id !== id) });
   }
 
-  function cancelOrder(id) {
+  async function cancelOrder(id) {
     if (financiallyLocked) { flash('请先核对待处理收退款，暂不能取消其他订单'); return; }
     const existing = ledgerRef.current.orders.find((order) => order.id === id);
     if (existing?.payment?.provider === 'sqb') { openAfterSales(existing, 'return'); return; }
     if (!window.confirm('确定取消订单？商品将退回库存，该订单金额将从营收中扣除。实际退款请另行完成。')) return;
+    if (online) { if (await saveCloud('order-revise', { id, items: [], cancel: true })) flash('云端订单已取消，库存和营收已回退'); return; }
     try {
       if (saveLedger(reviseOrder(ledgerRef.current, id, [], true))) flash('订单已取消，库存和营收已回退');
     } catch (error) { flash(error.message); }
@@ -968,8 +1094,9 @@ function App() {
     } catch (issue) { flash(issue.message); }
   }
 
-  function beforeAfterSalesStart(pending) {
+  async function beforeAfterSalesStart(pending) {
     try {
+      if (online) return Boolean(await saveCloud('adjustment-prepare', { parentId: pending.parentId, request: pending.request, preview: pending.preview }));
       if (ledgerRef.current.pendingPayment || ledgerRef.current.pendingAdjustment) throw new Error('请先处理当前收退款');
       validateAdjustmentStock(ledgerRef.current.products, pending.preview.plan);
       return saveLedger({ ...ledgerRef.current, pendingAdjustment: pending });
@@ -978,6 +1105,7 @@ function App() {
 
   async function applyAfterSalesRecord(record) {
     if (!['paid', 'refunded', 'completed'].includes(record.state)) return;
+    if (online) { await cloudCommand('adjustment-sync', { id: record.id }); setAfterSalesOrder(null); setLastResult('退换货已核对，云端订单与库存已同步'); if (record.kind === 'exchange-charge') await notifyConfirmedPayment(record.id); return; }
     const next = applyAdjustment(ledgerRef.current, record);
     if (!saveLedger(next, true)) throw new Error('账务保存失败，请勿重复收退款');
     setAfterSalesOrder(null);
@@ -990,13 +1118,15 @@ function App() {
   async function closeAfterSales(record) {
     if (['paid', 'refunded', 'completed'].includes(record?.state)) { await applyAfterSalesRecord(record); return; }
     if (ledgerRef.current.pendingAdjustment && !['failed', 'not-started'].includes(record?.state)) return;
+    if (online) { if (ledgerRef.current.pendingAdjustment) await cloudCommand('adjustment-clear', { id: ledgerRef.current.pendingAdjustment.id }); setAfterSalesOrder(null); return; }
     if (record?.state === 'failed') await sqbCall('acknowledge', { id: record.id });
     if (ledgerRef.current.pendingAdjustment && !saveLedger({ ...ledgerRef.current, pendingAdjustment: null })) return;
     setAfterSalesOrder(null);
   }
 
-  function saveOrderEdit(id, items) {
+  async function saveOrderEdit(id, items) {
     if (financiallyLocked) { flash('请先核对待处理收退款，暂不能修改其他订单'); return; }
+    if (online) { if (await saveCloud('order-revise', { id, items, cancel: false })) { setEditingOrder(null); flash('云端换货已保存，库存和流水已更新'); } return; }
     try {
       const next = reviseOrder(ledgerRef.current, id, items);
       if (!saveLedger(next)) return;
@@ -1005,15 +1135,16 @@ function App() {
     } catch (error) { flash(error.message); }
   }
 
-  function confirmLegacyOrder(id) {
+  async function confirmLegacyOrder(id) {
     if (financiallyLocked) { flash('请先核对待处理收退款'); return; }
     if (!window.confirm('确认这笔旧版待收款订单已经收到款项？')) return;
+    if (online) { await saveCloud('legacy-confirm', { id }); return; }
     const current = ledgerRef.current;
     if (!current.orders.some((order) => order.id === id && order.status === '待收款')) return;
     saveLedger({ ...current, orders: current.orders.map((order) => order.id === id ? { ...order, status: '已收款', paidAt: new Date().toISOString() } : order) });
   }
 
-  function saveProduct(product) {
+  async function saveProduct(product) {
     const payload = {
       ...product,
       name: product.name.trim(),
@@ -1041,7 +1172,7 @@ function App() {
       return;
     }
 
-    const saved = setProducts((current) => {
+    const saved = online ? await saveCloud('product-save', { product: payload }) : setProducts((current) => {
       const exists = current.some((item) => item.id === payload.id);
       if (exists) return current.map((item) => (item.id === payload.id ? payload : item));
       return [payload, ...current];
@@ -1051,8 +1182,9 @@ function App() {
     flash('商品已保存');
   }
 
-  function removeProduct(id) {
+  async function removeProduct(id) {
     if (cart.some(item => item.id === id && isExternalAward(item))) { flash('请先移除购物车中的抽奖奖品，再删除对应商品'); return; }
+    if (online) { if (await saveCloud('product-delete', { id })) { setCart(current => current.filter(item => item.id !== id)); setGiftChoiceQueue(current => current.filter(choice => choice.mainProductId !== id && !choice.gifts.some(gift => gift.productId === id))); } return; }
     if (!setProducts((current) => current.filter((item) => item.id !== id))) return;
     setCart((current) => current.filter((item) => item.id !== id));
     setPromoRules((current) =>
@@ -1063,7 +1195,7 @@ function App() {
     );
   }
 
-  function savePromoRule(rule) {
+  async function savePromoRule(rule) {
     const payload = normalizePromoRules([rule])[0];
     const mainProducts = payload.mainProductIds.filter((productId) => productId);
     const gifts = payload.gifts.filter((gift) => gift.productId);
@@ -1089,6 +1221,11 @@ function App() {
       return false;
     }
 
+    if (online) {
+      const current = ledgerRef.current.promoRules || [], exists = current.some(item => item.id === payload.id);
+      if (!await saveCloud('settings-save', { promoRules: exists ? current.map(item => item.id === payload.id ? payload : item) : [payload, ...current] })) return false;
+      flash('加赠规则已保存到云端'); return true;
+    }
     setPromoRules((current) => {
       const exists = current.some((item) => item.id === payload.id);
       if (exists) return current.map((item) => (item.id === payload.id ? payload : item));
@@ -1098,11 +1235,13 @@ function App() {
     return true;
   }
 
-  function togglePromoRule(ruleId) {
+  async function togglePromoRule(ruleId) {
+    if (online) { await saveCloud('settings-save', { promoRules: (ledgerRef.current.promoRules || []).map(rule => rule.id === ruleId ? { ...rule, enabled: !rule.enabled } : rule) }); return; }
     setPromoRules((current) => current.map((rule) => (rule.id === ruleId ? { ...rule, enabled: !rule.enabled } : rule)));
   }
 
-  function removePromoRule(ruleId) {
+  async function removePromoRule(ruleId) {
+    if (online) { if (await saveCloud('settings-save', { promoRules: (ledgerRef.current.promoRules || []).filter(rule => rule.id !== ruleId) })) flash('加赠规则已删除'); return; }
     setPromoRules((current) => current.filter((rule) => rule.id !== ruleId));
     flash('加赠规则已删除');
   }
@@ -1120,7 +1259,7 @@ function App() {
         return;
       }
 
-      if (!setProducts((current) => mergeProducts(current, incoming))) return;
+      if (online ? !await saveCloud('products-import', { products: incoming }) : !setProducts((current) => mergeProducts(current, incoming))) return;
       flash(`已导入 ${incoming.length} 个商品`);
     } catch (error) {
       flash(error.message || '导入失败，请检查表头');
@@ -1172,7 +1311,7 @@ function App() {
       promoRules,
       heldCarts,
     };
-    const backup = await sqbCall('export-backup', { business });
+    const backup = online ? await onlineRequest('export') : await sqbCall('export-backup', { business });
 
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -1187,6 +1326,7 @@ function App() {
   }
 
   async function restoreBackup(file) {
+    if (online) { flash('在线迁移请到「账号与资料」导入原备份；已有云端数据不能直接覆盖'); setActiveTab('account'); return; }
     if (!file) return;
     if (financiallyLocked) { flash('请先处理收退款或恢复任务'); return; }
     backupWorking.current = true; setBackupBusy(true);
@@ -1226,7 +1366,8 @@ function App() {
   function uploadPaymentQr(file) {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
+      if (online) { if (await saveCloud('settings-save', { paymentQr: String(reader.result || '') })) flash('收款码已保存到云端'); return; }
       setPaymentQr(String(reader.result || ''));
       flash('收款码已保存');
     };
@@ -1235,10 +1376,19 @@ function App() {
 
   return (
     <main className="shell">
-      <div inert={financiallyLocked && !reviewingPayment ? '' : undefined}>
+      {online && <section className="onlineBar" aria-label="云端账号与收银权限"><div><strong>云端收银 · {online.session.user.displayName || online.session.user.username}</strong><small>{lease?.mine ? '本终端持有收银权限' : lease?.held ? `收银台由 ${lease.displayName || '其他终端'} 使用` : '取得收银权限后可操作商品、库存与订单'} · 数据版本 {cloudRevision.current}</small></div>
+        <div className="onlineActions"><button className="utilityButton" disabled={cloudBusy || couponBusy} onClick={refreshCloud}>刷新云端数据</button>
+          {lease?.mine ? <button className="utilityButton" disabled={cloudBusy || !!pendingPayment || !!pendingAdjustment || !!ledger.pendingZero || !!cart.length} onClick={() => changeLease('release')}>释放收银台</button> : <button className="utilityButton" disabled={cloudBusy || lease?.held} onClick={() => changeLease('acquire')}>取得收银权限</button>}
+          {!lease?.mine && (lease?.held || lease?.recoveryRequired) && online.session.user.role === 'admin' && <button className="utilityButton" disabled={cloudBusy} onClick={() => changeLease('acquire', true)}>接管并恢复</button>}
+          <button className="utilityButton" disabled={cloudBusy} onClick={() => setActiveTab('account')}>账号与资料</button><button className="utilityButton" disabled={cloudBusy} onClick={online.logout}>退出</button>
+        </div></section>}
+      {online && (cloudError || online.notice) && <p className="onlineNotice dangerText" role="alert">{cloudError || online.notice}</p>}
+      {online && !lease?.mine && <p className="onlineNotice">当前可以查看共享数据和管理活动。收银、商品与库存修改需要先取得收银权限；未完成交易保留在云端。</p>}
+      {online && ['products', 'promos'].includes(activeTab) && online.session.user.role !== 'admin' && <p className="onlineNotice">商品、库存和赠品规则由管理员维护。收银员可以在「收银」中使用已保存的商品。</p>}
+      <div inert={!online && financiallyLocked && !reviewingPayment ? '' : undefined}>
       <header className="topbar">
         <div>
-          <p className="kicker">离线摆摊收银</p>
+          <p className="kicker">{online ? '云端共享账本' : '离线摆摊收银'}</p>
           <h1>摆摊收银台</h1>
         </div>
         <button className="iconButton" aria-label="导出流水" title="导出全部流水（不受查询条件影响）" onClick={exportOrders}>
@@ -1261,15 +1411,15 @@ function App() {
         </div>
       </section>
       {lastResult && <div className="resultBanner" role="status"><span>{lastResult}</span><button className="iconButton" aria-label="关闭交易结果" onClick={() => setLastResult('')}><X size={18} /></button></div>}
-      {pendingPayment?.review && <div className="recoveryBanner paymentReviewBanner" role="alert">
+      {pendingPayment?.review && (!online || lease?.mine) && <div className="recoveryBanner paymentReviewBanner" role="alert">
         <div><strong>收款待核对 · {pendingPayment.draft.orderNo} · {money(pendingPayment.record.amount / 100)}</strong>
-          <span>{pendingPayment.review.message}</span><small>本浏览器暂停收银及账务修改，待核对记录仍保留。</small></div>
+          <span>{pendingPayment.review.message}</span><small>{online ? '云端暂停收银及账务修改，待核对记录仍保留。' : '本浏览器暂停收银及账务修改，待核对记录仍保留。'}</small></div>
         <button className="utilityButton" onClick={() => setSqbOrder(ledgerRef.current.pendingPayment.draft)}><History size={18} /> 查看待核对收款</button>
       </div>}
       {recoveryMessage && <div className="recoveryBanner" role="alert"><span>待核实：{recoveryMessage}</span><button className="utilityButton" onClick={recoverTransactions}><RefreshCw size={16} /> 重试对账</button></div>}
 
       {activeTab === 'cashier' && (
-        <div inert={reviewingPayment ? '' : undefined}>
+        <div inert={reviewingPayment || online && financiallyLocked ? '' : undefined}>
         <CashierView
           products={filteredProducts}
           groups={groups}
@@ -1299,8 +1449,9 @@ function App() {
       )}
 
       {activeTab === 'products' && (
-        <div inert={reviewingPayment ? '' : undefined}>
+        <div inert={reviewingPayment || online && (financiallyLocked || online.session.user.role !== 'admin') ? '' : undefined}>
         <ProductsView
+          online={Boolean(online)}
           products={filteredProducts}
           groups={groups}
           activeGroup={activeGroup}
@@ -1353,17 +1504,18 @@ function App() {
       )}
 
       {activeTab === 'promos' && (
-        <div inert={reviewingPayment ? '' : undefined}>
+        <div inert={reviewingPayment || online && (financiallyLocked || online.session.user.role !== 'admin') ? '' : undefined}>
         <section className="workspace fullWorkspace">
           <div className="sectionHeader"><h2>赠品规则</h2></div>
-          <PromoRulesPanel rules={promoRules} saleProducts={saleProducts} giftProducts={giftProducts}
+          <PromoRulesPanel key={online ? `${Boolean(lease?.mine)}:${JSON.stringify(promoRules)}` : 'local'} rules={promoRules} saleProducts={saleProducts} giftProducts={giftProducts}
             onSave={savePromoRule} onToggle={togglePromoRule} onRemove={removePromoRule} />
         </section>
         </div>
       )}
 
-      {activeTab === 'coupons' && <div inert={reviewingPayment ? '' : undefined}><CouponManager products={products} /></div>}
-      {activeTab === 'lottery' && <div inert={reviewingPayment ? '' : undefined}><LotteryWorkspace products={products} onCashier={() => setActiveTab('cashier')} /></div>}
+      {activeTab === 'coupons' && <div inert={!online && reviewingPayment ? '' : undefined}><CouponManager products={products} canRecover={!online || !!lease?.mine} /></div>}
+      {activeTab === 'lottery' && <div inert={!online && reviewingPayment ? '' : undefined}><LotteryWorkspace products={products} onCashier={() => setActiveTab('cashier')} /></div>}
+      {online && activeTab === 'account' && <OnlineAccountPage user={online.session.user} onImport={bundle => cloudCommand('initial-import', { bundle })} />}
 
       <nav ref={bottomNavRef} className="bottomNav" aria-label="主导航">
         <button aria-current={activeTab === 'cashier' ? 'page' : undefined} className={activeTab === 'cashier' ? 'active' : ''} onClick={() => setActiveTab('cashier')}>
@@ -1387,7 +1539,7 @@ function App() {
       </nav>
       </div>
       {(couponBusy || couponRecovery) && <div className="modalBackdrop couponProgress"><div className="modal" role="dialog" aria-modal="true" aria-label="券状态处理"><h2>{couponBusy ? '正在处理优惠券' : '正在核对零元结算'}</h2><p role="status">{couponBusy ? '请稍候' : recoveryMessage || '请保持联网，勿重复结算'}</p>{!couponBusy && <button className="utilityButton" onClick={recoverTransactions}><RefreshCw size={18} /> 重试核对</button>}</div></div>}
-      {(!restoreReady || !startupReady || backupBusy) && <div className="modalBackdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="备份恢复"><h2>{backupBusy ? '正在处理备份' : '正在核对账务'}</h2><p role="status">{recoveryMessage || '正在核对本地经营数据和支付记录'}</p>{!backupBusy && <button className="utilityButton" onClick={recoverTransactions}><RefreshCw size={18} /> 重试对账</button>}</div></div>}
+      {(!online && (!restoreReady || !startupReady) || backupBusy) && <div className="modalBackdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="备份恢复"><h2>{backupBusy ? '正在处理备份' : '正在核对账务'}</h2><p role="status">{recoveryMessage || (online ? '正在处理云端经营数据' : '正在核对本地经营数据和支付记录')}</p>{!backupBusy && <button className="utilityButton" onClick={recoverTransactions}><RefreshCw size={18} /> 重试对账</button>}</div></div>}
 
       {scannerOpen && <ScannerModal onClose={() => setScannerOpen(false)} onDetected={scanBarcode} />}
       {editingProduct && (
@@ -1400,7 +1552,7 @@ function App() {
           onClose={cancelPayment}
           onPaid={markPaid}
           onZero={makeZeroOrder}
-          onHold={() => { if (holdCart()) setPaymentOrder(null); }}
+          onHold={async () => { if (await holdCart()) setPaymentOrder(null); }}
         />
       )}
       {editingOrder && <OrderEditModal order={editingOrder} products={products} onClose={() => setEditingOrder(null)} onSave={saveOrderEdit} />}
@@ -1610,6 +1762,7 @@ function CashierView(props) {
 }
 
 function ProductsView({
+  online = false,
   products,
   groups,
   activeGroup,
@@ -1654,8 +1807,8 @@ function ProductsView({
         <button className="utilityButton" onClick={onBackup}>
           <Download size={18} /> 导出备份
         </button>
-        <button className="utilityButton" onClick={() => backupRef.current?.click()}>
-          <Upload size={18} /> 恢复备份
+        <button className="utilityButton" onClick={() => online ? onRestore() : backupRef.current?.click()}>
+          <Upload size={18} /> {online ? '资料迁移' : '恢复备份'}
         </button>
         <input
           ref={importRef}
@@ -1688,7 +1841,7 @@ function ProductsView({
           }}
         />
         <p>商品类型：售卖品 / 赠品 / 优惠券。优惠券金额使用“抵扣金额”列，条码列使用文本格式。</p>
-        <p>换电脑时请先“导出备份”，在新电脑打开系统后用“恢复备份”一次性导入商品、图片、订单流水、收款码和加赠规则。</p>
+        <p>{online ? '资料统一保存在云端，换电脑后登录即可继续使用。原本机资料请通过“资料迁移”导入空的云端账本。' : '换电脑时请先“导出备份”，在新电脑打开系统后用“恢复备份”一次性导入商品、图片、订单流水、收款码和加赠规则。'}</p>
       </div>
 
       <SearchBox query={query} setQuery={setQuery} />
@@ -1795,9 +1948,9 @@ function PromoRulesPanel({ rules, saleProducts, giftProducts, onSave, onToggle, 
     }));
   }
 
-  function submitRule(event) {
+  async function submitRule(event) {
     event.preventDefault();
-    if (onSave(draft)) setDraft(newDraft());
+    if (await onSave(draft)) setDraft(newDraft());
   }
 
   function editRule(rule) {
@@ -2523,10 +2676,10 @@ function ScannerModal({ onClose, onDetected }) {
   );
 }
 
-function CashierSession() {
-  const [active, setActive] = useState(!navigator.locks);
+function CashierSession({ online = null }) {
+  const [active, setActive] = useState(Boolean(online) || !navigator.locks);
   useEffect(() => {
-    if (!navigator.locks) return;
+    if (online || !navigator.locks) return;
     let release;
     let disposed = false;
     const controller = new AbortController();
@@ -2537,7 +2690,7 @@ function CashierSession() {
     }).catch(() => {});
     return () => { disposed = true; controller.abort(); release?.(); };
   }, []);
-  return active ? <App /> : <main className="sessionWait"><h1>收银台已在其他窗口打开</h1><p>关闭同一收银台的其他窗口后，本页会自动继续。</p></main>;
+  return active ? <App online={online} /> : <main className="sessionWait"><h1>收银台已在其他窗口打开</h1><p>关闭同一收银台的其他窗口后，本页会自动继续。</p></main>;
 }
 
-createRoot(document.getElementById('root')).render(<CashierSession />);
+createRoot(document.getElementById('root')).render(<OnlineGate>{online => <CashierSession key={online?.session.user.id || 'local'} online={online} />}</OnlineGate>);

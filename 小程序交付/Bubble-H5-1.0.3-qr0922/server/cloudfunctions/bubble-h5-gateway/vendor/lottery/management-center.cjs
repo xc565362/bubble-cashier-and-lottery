@@ -61,6 +61,11 @@ function createManagementCenter({ config, prizes, campaign, fetchFn = fetch,allo
     }
     return prepared;
   }
-  return { read, counts, increase,provision };
+  async function recordStatuses(refs) {
+    const info=await request('/v1/info');
+    if(info.service!=='stall-coupon-center'||info.centerId!==config.centerId||info.environment!==(allowLocalTest&&config.environment==='development'?'development':'production')||info.role!=='admin'||!info.capabilities?.includes('lottery-record-status-v1'))throw new Error('券中心记录查询尚未升级');
+    return request('/v1/lottery/records/status',{centerId:config.centerId,environment:info.environment,refs});
+  }
+  return { read, counts, increase,provision,recordStatuses,centerId:config?.centerId,environment:config?.environment||'production' };
 }
 module.exports = { createManagementCenter };

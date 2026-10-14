@@ -1,0 +1,32 @@
+<view class="screen">
+  <brand-header/>
+  <view class="page-heading"><view class="kicker">MY RACE DAY REWARD</view><view class="page-title">我的奖品</view><view class="page-subtitle">购物抵扣或现场领取，查看你的好礼凭证。</view></view>
+  <view wx:if="{{loading}}" class="loading">正在加载奖品…</view>
+  <view wx:elif="{{error}}" class="error-box">{{error}}<button class="secondary" bindtap="load">重新加载</button></view>
+  <view wx:elif="{{!entry}}" class="empty"><view class="symbol">✧</view><view class="title">好礼还在等你</view><view class="copy">参与一次抽奖，收获一份赛场惊喜。<view>8 重好礼，100% 中奖。</view></view><button class="primary" bindtap="goHome">去抽一份好运 →</button></view>
+  <block wx:else>
+    <view class="ticket">
+      <view class="ticket-top"><text class="tag">{{entry.statusLabel}}</text><view class="large-art"><prize-art prize="{{entry.prize}}"/></view><view class="prize-title">{{entry.prize.name}}</view><view class="ticket-subtitle">FOR YOUR NEXT ADVENTURE</view></view>
+      <view class="ticket-bottom">
+        <block wx:if="{{entry.status==='pending'}}">
+          <view class="code-modes">
+            <button class="code-mode {{codeMode==='qr'?'active':''}}" data-mode="qr" bindtap="changeCodeMode" aria-label="{{codeMode==='qr'?'二维码，已选中':'二维码'}}">二维码</button>
+            <button class="code-mode {{codeMode==='barcode'?'active':''}}" data-mode="barcode" bindtap="changeCodeMode" aria-label="{{codeMode==='barcode'?'条形码，已选中':'条形码'}}">条形码</button>
+          </view>
+          <view class="code-display">
+            <qr-code wx:if="{{codeMode==='qr'}}" code="{{entry.code}}"/>
+            <barcode wx:else code="{{entry.code}}"/>
+          </view>
+          <view class="code {{entry.checkoutCoupon?'coupon-code':''}}" user-select>{{entry.formattedCode}}</view>
+          <button class="copy" bindtap="copy">复制{{entry.checkoutCoupon?'购物券码':'核销码'}}</button>
+          <view class="hint">仅可核销一次，请勿随意转发<view wx:if="{{isDemo}}">演示凭证 · 不可实际抵扣或领取<view wx:if="{{entry.checkoutCoupon}}">购物券需接入收银系统后使用</view></view></view>
+        </block>
+        <block wx:elif="{{entry.status==='using'}}"><view class="status">使用中</view><view class="hint">收银台正在结算，请等待付款结果。<view>付款成功后将自动显示已核销，请勿重复付款。</view></view></block>
+        <block wx:elif="{{entry.status==='issuing'||entry.status==='unavailable'||entry.status==='not_started'}}"><view class="status">{{entry.statusLabel}}</view><view class="hint">中奖记录已保存，请稍候刷新。<view>券码可用后在此显示，无需重新抽奖。</view></view></block>
+        <block wx:else><view class="status">{{entry.status==='redeemed'?'✓ 已核销':entry.status==='voided'?'已作废':'已超过使用期限'}}</view><view class="hint">{{entry.status==='redeemed'?'此凭证已使用，不可重复核销。':'请联系现场工作人员。'}}</view></block>
+      </view>
+    </view>
+    <view class="detail-box"><view class="detail-row"><text>{{entry.checkoutCoupon?'活动地点':'领取地点'}}</text><text>{{campaign.venue}}</text></view><view class="detail-row"><text>抽奖时间</text><text>{{entry.createdLabel}}</text></view><view class="detail-row"><text>核销截止</text><text>{{entry.expiresLabel}}</text></view><view wx:if="{{entry.status==='redeemed'}}" class="detail-row"><text>核销时间</text><text>{{entry.redeemedLabel}}</text></view><view wx:if="{{entry.checkoutCoupon}}" class="detail-row"><text>使用门槛</text><text>{{entry.minimumLabel}}</text></view><view class="detail-title">使用须知</view><view>{{entry.checkoutCoupon?campaign.cashTerms:'请到活动展位出示核销码，由工作人员确认核销后领取奖品。'}}</view><view>可用或使用中时每 3 秒更新状态，也可下拉刷新。</view><button class="secondary refresh" bindtap="load">刷新使用状态</button></view>
+  </block>
+  <bottom-nav active="prize"/>
+</view>

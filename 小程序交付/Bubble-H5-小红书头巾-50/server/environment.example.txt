@@ -3,6 +3,10 @@ H5_GATEWAY_ENABLED=0
 H5_BACKEND_REVIEWED=0
 H5_APP_ID=wx3cfec968f30fb6c1
 H5_APP_SECRET=
+# code2session requires AppSecret. cloud-ticket uses trusted native WXContext.
+H5_LOGIN_MODE=code2session
+# Required only for cloud-ticket; must exactly match an allowed H5 HTTPS origin.
+H5_TICKET_ORIGIN=https://h5.example.com
 H5_TOKEN_SECRET=
 H5_ALLOWED_ORIGINS=https://h5.example.com
 H5_API_BASE_PATH=/api/scarf-h5

@@ -1,6 +1,7 @@
 import {escapeHtml as e,safeEntry,campaignView,parseLaunch,createEpoch,refreshDelay} from './core.mjs';
 import {prizeBoard,prizeArt as art,fallbackPrizeImage,probabilityCaption,probabilityExplanation} from './catalog.mjs';
 import {createApi} from './api.mjs';
+import {returnToMiniProgram} from './login-return.mjs';
 import {drawQr,drawBarcode} from './qr.mjs';
 
 const runtime=window.BUBBLE_H5_CONFIG||{},main=document.querySelector('#main'),modal=document.querySelector('#modal');
@@ -8,7 +9,7 @@ const initial=parseLaunch(location.hash);
 // Remove the one-use login code before rendering or loading optional scripts.
 history.replaceState(null,'',location.pathname+location.search+`#/${initial.returnRoute}`);
 const previewAllowed=runtime.mode==='preview'&&['localhost','127.0.0.1','[::1]'].includes(location.hostname);
-let api=previewAllowed?(await import('./preview.mjs')).createPreview(sessionStorage):createApi(runtime);
+let api=previewAllowed?(await import('./preview.mjs')).createPreview(sessionStorage):createApi(runtime,{onAuthExpired:error=>{authFailure(error);render();}});
 const epoch=createEpoch();
 let S={route:initial.returnRoute,loading:true,error:'',state:null,drawing:false,busy:false,codeMode:'qr',identity:null,staffCode:'',staffEntry:null,previewOpen:false,previewScenario:'empty'};
 let refreshTimer,toastTimer,scanStream,scanTimer,modalResolve;
@@ -81,7 +82,7 @@ function render(){
   document.querySelectorAll('.nav .item').forEach(link=>{const active=link.dataset.page===S.route;link.classList.toggle('selected',active);active?link.setAttribute('aria-current','page'):link.removeAttribute('aria-current');link.setAttribute('aria-disabled',String(S.drawing||S.busy));});
   main.className=`screen ${S.route}`;
   if(S.loading)main.innerHTML='<p class="loading" role="status">正在加载…</p>';
-  else if(S.error)main.innerHTML=heading('BUBBLE RACE DAY','赛场同行','每一份热爱，都有回响。')+`<div class="error-box" role="alert"><p>${e(S.error)}</p>${button('重新加载','refresh','secondary')}<p class="hint">${!api.isPreview&&!api.hasSession()?'请返回小程序，从活动入口重新打开本页面。':''}</p></div>`+previewTools();
+  else if(S.error)main.innerHTML=heading('BUBBLE RACE DAY','赛场同行','每一份热爱，都有回响。')+`<div class="error-box" role="alert"><p>${e(S.error)}</p>${!api.isPreview&&!api.hasSession()?button('返回小程序重新登录','relogin','secondary'):button('重新加载','refresh','secondary')}<p class="hint">${!api.isPreview&&!api.hasSession()?'登录凭证已清除。请返回小程序重新进入；已中奖结果会为你保留。':''}</p></div>`+previewTools();
   else main.innerHTML=({home,prize,rules,staff}[S.route]||home)()+previewTools();
   if(S.route==='prize'&&S.state?.entry?.status==='pending'&&!S.loading&&!S.error){const canvas=main.querySelector('canvas');if(canvas){try{S.codeMode==='qr'?drawQr(canvas,S.state.entry.code):drawBarcode(canvas,S.state.entry.code);}catch(error){canvas.remove();const message=document.createElement('p');message.className='hint';message.textContent=error.message;main.querySelector('.code-display')?.append(message);}}}
 }
@@ -216,6 +217,7 @@ document.addEventListener('click',async event=>{
   if(event.target.closest('.nav a')&&(S.drawing||S.busy)){event.preventDefault();return;}
   if(!control||control.disabled)return;
   const action=control.dataset.action;
+  if(action==='relogin'){control.disabled=true;try{await returnToMiniProgram({activity:'bubble',entryPage:runtime.miniProgramLoginPage,route:S.route});}catch(error){await alertUser('重新进入活动',error.message);}finally{control.disabled=false;}return;}
   if(action==='draw')return draw();
   if(action==='refresh')return load();
   if(action==='open-prize'){closeModal(false);return navigate('prize');}
@@ -241,5 +243,5 @@ window.addEventListener('online',()=>{if(!document.hidden&&!refreshBlocked())loa
 window.addEventListener('pagehide',()=>{stopRefresh();stopCamera();epoch.next();api.logout?.();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){stopRefresh();stopCamera();unavailable();}else if(!refreshBlocked())load();else schedule();});
 window.addEventListener('resize',()=>{if(S.route==='prize'&&!S.loading&&!S.error)render();});
-try{if(!api.isPreview&&initial.code)await api.login(initial.code);await load();}
+try{if(!api.isPreview&&(initial.ticket||initial.code))await api.login(initial.ticket?{ticket:initial.ticket}:initial.code);await load();}
 catch(error){S.loading=false;S.error=error.message;authFailure(error);render();}

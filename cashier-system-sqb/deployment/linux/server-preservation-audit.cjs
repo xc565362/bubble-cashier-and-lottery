@@ -1,0 +1,17 @@
+'use strict';
+// Read-only business-state witness. Stores hashes and counts, never rows/secrets.
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+const {DatabaseSync}=require('node:sqlite');
+const sha=x=>crypto.createHash('sha256').update(x).digest('hex');
+function env(file){const out={};for(const line of fs.readFileSync(file,'utf8').split(/\r?\n/)){const m=/^([A-Z][A-Z0-9_]*)=(.*)$/.exec(line.trim());if(m)out[m[1]]=m[2].replace(/^(['"])(.*)\1$/,'$2');}return out;}
+function db(file,tables){const d=new DatabaseSync(file,{readOnly:true});try{d.exec('PRAGMA query_only=ON; BEGIN');const out={};for(const table of tables){if(!/^[a-z_]+$/.test(table))throw Error('bad table');const rows=d.prepare('SELECT * FROM '+table).all().map(r=>JSON.stringify(r)).sort();out[table]={count:rows.length,sha256:sha(JSON.stringify(rows))};}return out;}finally{d.close();}}
+function files(root){const out={};for(const entry of fs.readdirSync(root,{withFileTypes:true})){if(entry.name==='service.lock'||entry.name.startsWith('.migration-backup-'))continue;const f=path.join(root,entry.name);if(entry.isSymbolicLink())throw Error('Unexpected symlink');if(entry.isDirectory()){for(const [k,v]of Object.entries(files(f)))out[entry.name+'/'+k]=v;}else if(entry.isFile())out[entry.name]=sha(fs.readFileSync(f));}return out;}
+const phase=process.argv[2],reportFile=process.argv[3];
+if(!['before','after'].includes(phase)||!reportFile?.startsWith('/var/lib/bubble-online-deploy-backups/'))throw Error('Explicit private witness path required');
+const online=env('/etc/bubble-online/service.env'),coupon=env('/var/lib/bubble-coupons/deployment/coupon.env');
+if(online.BUBBLE_ONLINE_DATA_DIR!=='/var/lib/bubble-online'||!coupon.COUPON_DATA_DIR?.startsWith('/var/lib/bubble-coupons'))throw Error('Unexpected data locations');
+const d=new DatabaseSync('/var/lib/bubble-online/ledger.sqlite',{readOnly:true});let summary;try{const s=JSON.parse(d.prepare('SELECT body FROM online_ledger WHERE id=1').get().body);summary={products:s.products.length,orders:s.orders.length};}finally{d.close();}
+const state={onlineLedger:db('/var/lib/bubble-online/ledger.sqlite',['online_ledger','online_commands','online_ack','online_awards']),users:db('/var/lib/bubble-online/accounts.sqlite',['users']),coupons:db(path.join(coupon.COUPON_DATA_DIR,'coupons.sqlite'),['meta','campaigns','coupons','api_keys','operations','events','coupon_tokens']),payments:files('/var/lib/bubble-online/payments'),protectedFiles:Object.fromEntries(['/etc/bubble-online/service.env','/etc/bubble-online/keys/config.key','/var/lib/bubble-coupons/deployment/coupon.env'].map(f=>[f,sha(fs.readFileSync(f))]))};
+const stateHash=sha(JSON.stringify(state));
+if(phase==='before'){fs.writeFileSync(reportFile,JSON.stringify({at:new Date().toISOString(),summary,state,stateHash},null,2),{flag:'wx',mode:0o600});console.log(JSON.stringify({phase,summary,stateHash,readOnly:true}));}
+else{const prior=JSON.parse(fs.readFileSync(reportFile));const changed=[];for(const key of Object.keys(state)){if(JSON.stringify(state[key])!==JSON.stringify(prior.state[key]))changed.push(key);}const result={phase,summary,stateHash,beforeHash:prior.stateHash,unchanged:changed.length===0,changed,readOnly:true};fs.writeFileSync(reportFile+'.after.json',JSON.stringify(result,null,2),{flag:'wx',mode:0o600});console.log(JSON.stringify(result));if(changed.length)process.exitCode=2;}

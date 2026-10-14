@@ -7,7 +7,7 @@ const collections={
 };
 function createCloudStore(db){
   function collectionName(name){if(!collections[name])throw new Error('Unknown collection');return collections[name];}
-  return {transaction(callback){
+  return {readEntries:require('./draw-records.cjs').createCloudRecordsReader(db,collections.entries),transaction(callback){
     return db.runTransaction(async native=>callback({
       async get(collection,id){
         let result;

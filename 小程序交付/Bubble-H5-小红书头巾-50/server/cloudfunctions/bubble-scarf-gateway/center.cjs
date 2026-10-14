@@ -39,6 +39,7 @@ function createScarfCenter({config,fetchFn=fetch,allowLocalTest=false,now=Date.n
       return request('/v1/lottery/issue',{requestId:requestId('issue:'+campaignId+':'+awardId),campaignId,owner,awardId,code});
     },
     async detail({campaignId,owner,id}) { await verify(); return request('/v1/lottery/coupons/detail',{campaignId,owner,id}); },
+    async recordStatuses(refs) {await verify();return request('/v1/lottery/records/status',{...identity,refs});},
     async redeemed(campaignIds) {
       await verify(); let count=0;
       for(const id of new Set(campaignIds)) {const page=await request('/v1/coupons?campaignId='+encodeURIComponent(id)+'&state=REDEEMED'); if(!Number.isSafeInteger(page.total)||page.total<0)throw problem();count+=page.total;}

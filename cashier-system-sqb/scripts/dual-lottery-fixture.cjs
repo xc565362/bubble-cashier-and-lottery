@@ -115,9 +115,10 @@ async function createFixture({ randomIndex = limit => crypto.randomInt(limit), r
       if (parsedOrigin.protocol !== 'http:' || parsedOrigin.hostname !== '127.0.0.1' || parsedOrigin.origin !== origin) throw new Error('演示网关只允许127.0.0.1本机来源');
       const { createGateway: originalGateway } = require(path.join(originalH5Root, 'server/cloudfunctions/bubble-h5-gateway/gateway.cjs'));
       const { createGateway: scarfGateway } = require(path.join(scarfBackend, 'gateway.cjs'));
-      const codes = { original: new Map(), scarf: new Map() };
+      const codes = { original: new Map(), scarf: new Map() }, usedCodes={original:new Set(),scarf:new Set()};
       const make = (kind, factory, callLottery) => factory({ config: { enabled: true, appId: 'wx0000000000000001', tokenSecret: crypto.randomBytes(32).toString('hex'), sessionTtlMs: 30 * 60000, origins: [origin], basePath: '/' + kind + '-api' }, now,
         exchangeCode: async code => { const row = codes[kind].get(code); codes[kind].delete(code); if (!row || row.expiresAt <= now()) throw new Error('演示登录已失效，请从顶部入口重新进入'); return row.identity; },
+        consumeCode:async code=>{if(usedCodes[kind].has(code))throw Object.assign(new Error('隔离登录码已使用'),{code:'UNAUTHENTICATED',status:401,gatewayFault:true});usedCodes[kind].add(code);},
         consumeRate: async () => {}, callLottery });
       const original = make('original', originalGateway, async (action, payload, identity) => {
         const data = await originalCall(action, payload, identity);

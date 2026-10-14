@@ -146,7 +146,12 @@ export function AfterSalesModal({ order, products, initialType = 'return', pendi
         {!preview ? <button className="submitButton" disabled={busy || !!error} onClick={review}><Check size={18} /> 核对退换货</button> : <form onSubmit={async (event) => {
           event.preventDefault(); if (working.current || busy || !confirmed || preview.mode === 'test' && !testConsent) return;
           if (amount > 0 && !/^\d{16,32}$/.test(code.trim())) { setMessage('请扫描顾客付款码'); return; }
-          if (!onBeforeStart({ id: id.current, parentId: order.id, request, preview })) return;
+          working.current = true; setBusy(true);
+          let prepared = false;
+          try { prepared = await onBeforeStart({ id: id.current, parentId: order.id, request, preview }); }
+          catch (issue) { setMessage(issue.message); }
+          finally { working.current = false; setBusy(false); }
+          if (!prepared) return;
           const paymentCode = code.trim(); setCode('');
           await execute('start-adjustment', { parentId: order.id, request, digest: preview.digest, confirm: true, confirmTestPayment: testConsent, code: paymentCode });
         }}>

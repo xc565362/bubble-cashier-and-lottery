@@ -90,6 +90,6 @@ test('preview honors zero and full probability and blocks mobile redemption for 
 test('API surfaces backend error fields as well as message fields',async()=>{
   for(const field of ['message','error']){
     const api=createApi({apiBase:'https://example.invalid'}, {now:()=>1000,fetchImpl:async url=>({ok:!url.endsWith('/call'),status:url.endsWith('/call')?409:200,json:async()=>url.endsWith('/call')?{ok:false,code:'USE_CASHIER',[field]:'请到收银台核销'}:{ok:true,data:{token:'test',expiresAt:9999}}})});
-    await api.login('test');await assert.rejects(api.call('redeem'),error=>error.code==='USE_CASHIER'&&error.message==='请到收银台核销');
+    await api.login('testcode123');await assert.rejects(api.call('redeem'),error=>error.code==='USE_CASHIER'&&error.message==='请到收银台核销');
   }
 });

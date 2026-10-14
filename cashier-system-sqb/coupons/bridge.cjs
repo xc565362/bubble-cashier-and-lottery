@@ -25,6 +25,10 @@ function createCouponBridge({ directory, protect = value => value, unprotect = v
   let busy = false;
   const store = () => local ||= createCouponStore({ file: path.join(directory, 'coupon-development', 'coupons.sqlite') });
   function saveJournal() { write(stateFile, journal); }
+  function pendingSnapshot() {
+    return structuredClone(Object.values(journal).filter(row => !row.finished).map(row => ({ ...row,
+      canRelease: !row.zeroDraft && (!row.orderId || !getPayment(row.orderId) || ['failed', 'not-started'].includes(getPayment(row.orderId).state)) })));
+  }
   async function request(action, input = {}, cashier = false, target = config) {
     if (target.mode === 'local') return store().dispatch({ id: cashier ? config.deviceId : 'administrator', role: cashier ? 'cashier' : 'admin' }, action, input);
     const [method, route] = endpoints[action] || [];
@@ -114,6 +118,10 @@ function createCouponBridge({ directory, protect = value => value, unprotect = v
     async dispatch(action, payload = {}) {
       if (action === 'config') return info();
       if (action === 'physical-bindings') return structuredClone(bindings);
+      // Read-only recovery evidence. Unlike sync, this never settles a payment,
+      // queries the center, or rewrites the journal.
+      if (action === 'pending') return pendingSnapshot().map(row => ({ id: row.id, orderId: row.orderId || null,
+        error: row.error || '', canRelease: row.canRelease, coupon: { name: row.coupon?.name || '抽奖奖品', state: row.coupon?.state || 'UNKNOWN' } }));
       if (action === 'bind-physical-products') return exclusive(async () => {
         if (Object.values(journal).some(row => !row.finished)) throw new Error('还有占用或待同步的券，请先处理后修改商品绑定');
         const prizes = Object.fromEntries(Object.keys(selectors).map(prizeId => [prizeId,{prizeId,product:resolvePhysicalProduct(prizeId,payload.products)}]));
@@ -154,8 +162,7 @@ function createCouponBridge({ directory, protect = value => value, unprotect = v
             }
           }
         }
-        saveJournal(); return Object.values(journal).filter(row => !row.finished).map(row => ({ ...row,
-          canRelease: !row.zeroDraft && (!row.orderId || !getPayment(row.orderId) || ['failed', 'not-started'].includes(getPayment(row.orderId).state)) }));
+        saveJournal(); return pendingSnapshot();
       });
       if (action === 'reserve') return exclusive(async () => {
         const center = await request('info');
@@ -223,6 +230,8 @@ function createCouponBridge({ directory, protect = value => value, unprotect = v
     prepareDraft: (draft, paymentMode) => exclusive(() => prepareDraft(draft, paymentMode)),
     validatePhysicalItems: items => {for (const line of items || []) if (line.externalCoupon?.kind === 'physical') validatePhysicalLine(line,journal[line.externalCoupon.reservationId]?.binding);},
     settle,
+    // Internal recovery evidence; never a browser dispatch action.
+    readOnlineState: () => structuredClone(Object.values(journal)),
     close: () => local?.close(),
     hasPending: () => Object.values(journal).some(row => !row.finished),
     hasZeroPending: () => Object.values(journal).some(row => !row.finished && row.zeroDraft),

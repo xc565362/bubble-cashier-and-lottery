@@ -1,0 +1,20 @@
+.onlineLogin { min-height: 100dvh; display: grid; place-items: center; padding: 24px; }
+.onlineLoginCard { width: min(440px, 100%); background: #fff; border: 1px solid #d8e2dc; border-radius: 12px; padding: 28px; box-shadow: 0 10px 35px #173f3310; }
+.onlineLoginCard h1 { margin: 8px 0 14px; font-size: 27px; }
+.onlineLoginCard p, .onlineAccounts > p { line-height: 1.7; color: #536a62; }
+.onlineLoginCard form { display: grid; gap: 18px; margin-top: 24px; }
+.onlineLoginCard input, .onlineAccounts input, .onlineAccounts select { width: 100%; min-width: 0; }
+.onlineBar { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; align-items: center; background: #e6f3eb; padding: 12px 16px; margin-bottom: 18px; border-radius: 6px; }
+.onlineBar > div { display: grid; gap: 5px; }
+.onlineBar small { color: #536a62; line-height: 1.5; }
+.onlineBar .onlineActions { display: flex; gap: 8px; flex-wrap: wrap; }
+.onlineNotice { padding: 12px 16px; margin: 12px 0; border: 1px solid #dbc893; background: #fff8e8; line-height: 1.7; overflow-wrap: anywhere; }
+.onlineUserList { display: grid; gap: 12px; }
+.onlineUser { display: grid; grid-template-columns: minmax(130px, 1fr) 110px 80px minmax(230px, 1.5fr); gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid #d8e2dc; }
+.onlineUser > div { display: grid; gap: 6px; overflow-wrap: anywhere; }
+.onlineUser small { color: #536a62; }
+.onlineUser form { display: flex; gap: 8px; }
+.onlineUser form button { flex-shrink: 0; }
+.onlineUserCreate { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.onlineAccounts h3 { margin-top: 28px; }
+@media(max-width: 700px) { .onlineUser { grid-template-columns: 1fr 110px 80px; } .onlineUser form { grid-column: 1/-1; } .onlineUserCreate { grid-template-columns: 1fr; } .onlineLoginCard { padding: 22px; } }

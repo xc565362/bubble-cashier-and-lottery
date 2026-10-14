@@ -172,7 +172,7 @@ function createService({store, adminOpenIds = [], now = Date.now, random, random
 }
 
 function createCloudStore(db) {
-  return {transaction: job => db.runTransaction(async transaction => job({
+  return {readEntries: require('./draw-records.cjs').createCloudRecordsReader(db,COLLECTIONS.entries),transaction: job => db.runTransaction(async transaction => job({
     async get(collection, id) {
       try {
         const result = await transaction.collection(collection).doc(id).get();

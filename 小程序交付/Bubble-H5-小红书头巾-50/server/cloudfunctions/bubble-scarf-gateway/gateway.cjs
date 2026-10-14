@@ -8,17 +8,19 @@ const onlyKeys = (value, keys) => isRecord(value) && Object.keys(value).every(ke
 const validOpenId = value => typeof value === 'string' && /^[A-Za-z0-9_-]{10,128}$/.test(value);
 
 function readConfig(env = process.env) {
+  const loginMode = env.H5_LOGIN_MODE || 'code2session';
+  if (!['code2session', 'cloud-ticket'].includes(loginMode)) throw fault('INVALID_CONFIG', 'H5 登录模式尚未配置', 503);
   const origins = (env.H5_ALLOWED_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean);
   if (!origins.length || origins.some(origin => {
     try { const u = new URL(origin); return u.protocol !== 'https:' || u.origin !== origin || u.username || u.password; } catch { return true; }
   })) throw fault('INVALID_CONFIG', 'H5 正式域名尚未配置', 503);
-  if (env.H5_APP_ID !== SOURCE_APP_ID || !/^[A-Za-z0-9]{16,128}$/.test(env.H5_APP_SECRET || '') || !/^[a-fA-F0-9]{64}$/.test(env.H5_TOKEN_SECRET || '')) {
+  if (env.H5_APP_ID !== SOURCE_APP_ID || (loginMode === 'code2session' && !/^[A-Za-z0-9]{16,128}$/.test(env.H5_APP_SECRET || '')) || !/^[a-fA-F0-9]{64}$/.test(env.H5_TOKEN_SECRET || '') || (loginMode === 'cloud-ticket' && !origins.includes(env.H5_TICKET_ORIGIN))) {
     throw fault('INVALID_CONFIG', 'H5 登录服务尚未配置', 503);
   }
   const basePath = (env.H5_API_BASE_PATH || '/api/scarf-h5').replace(/\/$/, '');
   if (!/^\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+$/.test(basePath)) throw fault('INVALID_CONFIG', 'H5 接口路径尚未配置', 503);
   return {enabled: env.H5_GATEWAY_ENABLED === '1' && env.H5_BACKEND_REVIEWED === '1', appId: env.H5_APP_ID,
-    appSecret: env.H5_APP_SECRET, tokenSecret: env.H5_TOKEN_SECRET, origins, basePath, sessionTtlMs: 15 * 60 * 1000};
+    loginMode, ticketOrigin: env.H5_TICKET_ORIGIN, appSecret: env.H5_APP_SECRET, tokenSecret: env.H5_TOKEN_SECRET, origins, basePath, sessionTtlMs: 15 * 60 * 1000};
 }
 
 function createSessionCodec({appId, tokenSecret, sessionTtlMs = 15 * 60 * 1000}, now = Date.now) {
@@ -64,9 +66,11 @@ function createCodeExchange({appId, appSecret}, fetchFn = globalThis.fetch) {
   };
 }
 
-function createGateway({config, exchangeCode, callLottery, consumeRate, now = Date.now}) {
+function createGateway({config, exchangeCode, callLottery, consumeRate, consumeCode, consumeTicket, now = Date.now}) {
   const sessions = createSessionCodec(config, now);
   if (typeof consumeRate !== 'function') throw fault('INVALID_CONFIG', 'H5 限频服务尚未配置', 503);
+  const ticketMode = config.loginMode === 'cloud-ticket';
+  if (typeof (ticketMode ? consumeTicket : consumeCode) !== 'function') throw fault('INVALID_CONFIG', 'H5 登录重放保护尚未配置', 503);
   const originSet = new Set(config.origins);
   function respond(statusCode, data, origin) {
     const headers = {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Pragma': 'no-cache', 'Vary': 'Origin', 'X-Content-Type-Options': 'nosniff'};
@@ -96,10 +100,13 @@ function createGateway({config, exchangeCode, callLottery, consumeRate, now = Da
       let body;
       try { body = JSON.parse(text); } catch { throw fault('INVALID_REQUEST', '请求内容不是有效 JSON'); }
       if (path.endsWith('/session')) {
-        if (!onlyKeys(body, ['code']) || typeof body.code !== 'string' || !/^[A-Za-z0-9_-]{8,256}$/.test(body.code)) throw fault('INVALID_REQUEST', '请使用有效的微信登录凭证');
+        const field = ticketMode ? 'ticket' : 'code';
+        if (!onlyKeys(body, [field]) || typeof body[field] !== 'string' || !(ticketMode ? /^HT1\.[A-Za-z0-9_-]{43}$/ : /^[A-Za-z0-9_-]{8,256}$/).test(body[field])) throw fault('INVALID_REQUEST', '请使用有效的微信登录凭证');
         await consumeRate('login-global', 'all', 120, 60000);
-        await consumeRate('login-code', body.code, 6, 60000);
-        const openId = await exchangeCode(body.code);
+        await consumeRate('login-code', body[field], 6, 60000);
+        let openId;
+        if (ticketMode) openId = await consumeTicket(body.ticket, origin);
+        else { await consumeCode(body.code); openId = await exchangeCode(body.code); }
         return respond(200, {ok: true, data: sessions.issue(openId, origin)}, origin);
       }
       const authorization = headers.authorization || '';

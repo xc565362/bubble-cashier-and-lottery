@@ -1,7 +1,10 @@
 'use strict';
 const {readConfig, createCodeExchange, createGateway, createCloudRateLimiter} = require('./gateway.cjs');
-let handler,management,shared;
+const {createCloudCodeGuard, healthResponse, createCloudTicketStore, createNativeTicketHandler, checkCloudStorage} = require('./auth-support.cjs');
+let handler,management,shared,nativeLogin;
 exports.main = async event => {
+  const health = await healthResponse(event, process.env, {readConfig, defaultBasePath: '/api/scarf-h5', service: 'bubble-scarf-gateway', extraChecks: {cloudEnvironment: /^[A-Za-z0-9_-]{6,128}$/.test(process.env.SCARF_CLOUD_ENV || ''), staffConfigured: (process.env.SCARF_ADMIN_OPENIDS || '').split(',').some(id => /^[A-Za-z0-9_-]{10,128}$/.test(id.trim()))}, checkStorage: async () => { const cloud = require('wx-server-sdk'); cloud.init({env: process.env.SCARF_CLOUD_ENV}); return checkCloudStorage(cloud.database(), 'bubble_scarf_rates'); }});
+  if (health) return health;
   try {
     if (!shared) {
       const envId = process.env.SCARF_CLOUD_ENV;
@@ -26,8 +29,12 @@ exports.main = async event => {
       const {cloud,store,center}=shared;
       const {createScarfAdapter} = require('./adapter.cjs');
       const service=require('./service.cjs').createService({store,adminOpenIds:admins,center});
-      handler = createGateway({config, exchangeCode: createCodeExchange(config), callLottery: createScarfAdapter({cloud,service}), consumeRate: createCloudRateLimiter(cloud.database())});
+      const consumeRate = createCloudRateLimiter(cloud.database());
+      const tickets = config.loginMode === 'cloud-ticket' ? createCloudTicketStore(cloud.database(), {collection: 'bubble_scarf_rates', appId: config.appId, origin: config.ticketOrigin, audience: 'bubble-scarf-gateway'}) : null;
+      nativeLogin = createNativeTicketHandler({config, getWXContext: () => cloud.getWXContext(), tickets, consumeRate});
+      handler = createGateway({config, exchangeCode: createCodeExchange(config), callLottery: createScarfAdapter({cloud,service}), consumeRate, consumeCode: createCloudCodeGuard(cloud.database(), {collection: 'bubble_scarf_rates', appId: config.appId}), consumeTicket: tickets?.consume});
     }
+    if (event?.action === 'issueH5SessionTicket') return await nativeLogin(event);
     return await handler(event);
   } catch {
     // Deliberately omit environment values, provider messages, OpenIDs and incoming tokens from logs/responses.

@@ -183,8 +183,8 @@ test('draw with an expired production session renders a recoverable login error'
   assert.equal(h.state.drawing, false);
   assert.match(h.state.error, /登录已失效/);
   assert.match(h.main.innerHTML, /登录已失效/);
-  assert.match(h.main.innerHTML, /重新加载/);
-  assert.match(h.main.innerHTML, /从活动入口重新打开/);
+  assert.match(h.main.innerHTML, /返回小程序重新登录/);
+  assert.match(h.main.innerHTML, /返回小程序重新进入/);
   assert.equal(h.alerts.length, 1);
   assert.equal(h.modals.length, 0);
 });
@@ -242,4 +242,14 @@ test('an old draw rejection cannot log out or replace a newer identity', async (
   assert.equal(h.state.identity, identity);
   assert.equal(h.state.error, '');
   assert.equal(h.alerts.length, 0);
+});
+
+test('production failure screens hide cached/default prize controls and never display preview content',()=>{
+  for(const route of ['home','prize','rules']){
+    const h=appHarness({isPreview:false,hasSession:()=>true});h.state.route=route;
+    h.state.error='服务尚未开放';h.render();
+    assert.match(h.main.innerHTML,/服务尚未开放/);
+    assert.doesNotMatch(h.main.innerHTML,/prize-grid|data-action="draw"|code-display|演示奖品/);
+    assert.equal(h.context.document.querySelector('#preview-banner').hidden,true);
+  }
 });

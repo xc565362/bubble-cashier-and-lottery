@@ -14,6 +14,14 @@ function memoryStore() {
   return {
     seed(table, id, value) { rows.set(table + '/' + id, structuredClone(value)); },
     get(table, id) { return structuredClone(rows.get(table + '/' + id) || null); },
+    async readEntries({campaignId,mode,limit,after,outcome,participantRef}) {
+      await queue;
+      const prefix=(mode==='scarf'?'bubble_scarf_entries':'entries')+'/';
+      const all=[...rows].filter(([key])=>key.startsWith(prefix)).map(([key,row])=>({...structuredClone(row),_id:key.slice(prefix.length)}))
+        .filter(row=>row.campaignId===campaignId&&(!participantRef||row._id===participantRef)&&(outcome==='all'||(mode==='scarf'?row.outcome:row.prize?'won':'lost')===outcome))
+        .sort((a,b)=>a._id.localeCompare(b._id));
+      return {total:all.length,rows:all.filter(row=>row._id>after).slice(0,limit+1)};
+    },
     transaction(fn) {
       const pending = queue.then(async () => {
         const copy = structuredClone(rows);

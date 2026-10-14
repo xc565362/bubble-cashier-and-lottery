@@ -6,6 +6,8 @@
   "main": "electron/main.cjs",
   "scripts": {
     "start": "node payments/web.cjs",
+    "online:start": "node online/server.cjs",
+    "online:bootstrap": "node online/bootstrap.cjs",
     "coupons:start": "node coupons/server.cjs",
     "test": "node --test tests/*.test.js",
     "lottery:preview": "node scripts/preview-lottery-catalog.cjs",

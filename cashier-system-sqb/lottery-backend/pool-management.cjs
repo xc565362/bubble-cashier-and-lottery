@@ -90,7 +90,7 @@ function createPoolManagement({ store, campaign, prizes, now = Date.now, getCent
       return { service: 'bubble-lottery-management', version: 1, campaignId: campaign.id, title: campaign.title,
         revision: settings.revision, enabled: settings.enabled, mode: settings.mode, startsAt: campaign.startsAt, endsAt: campaign.endsAt, redemptionEndsAt: redemptionDeadline(campaign),
         total: config.total, allocated: stock.allocated, remaining: stock.remaining, blockedReason, audit,
-        catalog:settings.catalog, rulesText:settings.rulesText, capabilities:['rules-text-v1'],
+        catalog:settings.catalog, rulesText:settings.rulesText, capabilities:['rules-text-v1',...(typeof store.readEntries==='function'?['draw-records-v1']:[])],
         prizes: settings.catalog.map(p => ({ ...p, amount: p.amount || 0,
           quota: config.quantities[p.id], allocated: config.quantities[p.id] - stock.quantities[p.id], remaining: stock.quantities[p.id],
           weightBps: settings.weightsBps[p.id], effectiveProbability: blockedReason || !stock.remaining || !settings.enabled || now()<campaign.startsAt || now()>=campaign.endsAt ? 0 : settings.mode === 'fixed' ? settings.weightsBps[p.id] / 100 : stock.quantities[p.id] / stock.remaining * 100 })) };

@@ -6,6 +6,8 @@ import { availablePrizeProducts, safePrizeImage } from './lotterySettings.js';
 import { SCARF_CAMPAIGN_ID, matchingScarfProduct, scarfConnectionProblem, scarfDraft, scarfPayload } from './scarfSettings.js';
 import { ActivityRulesEditor } from './ActivityRulesEditor.jsx';
 import { RULES_TEXT_CAPABILITY } from './rulesText.js';
+import { LotteryRecords } from './LotteryRecords.jsx';
+import { DRAW_RECORDS_CAPABILITY } from './lotteryRecords.js';
 import './lottery.css';
 import './scarf.css';
 
@@ -100,6 +102,7 @@ export function ScarfManager({ products = [], onCashier }) {
       <dl className="lotteryTotals scarfTotals"><div><dt>总名额</dt><dd>{snapshot.inventory.total}</dd></div><div><dt>剩余名额</dt><dd>{snapshot.inventory.remaining}</dd></div><div><dt>已中奖</dt><dd>{snapshot.inventory.awarded}</dd></div><div><dt>已核销</dt><dd>{snapshot.inventory.redeemed ?? '待核对'}</dd></div><div><dt>中奖概率</dt><dd>{(snapshot.campaign.winProbabilityBps / 100).toFixed(2)}<small>%</small></dd></div></dl>
       <div className={`lotteryNotice ${!loading && centerProblem ? 'dangerText' : ''}`} role="status"><Cloud size={18} /><span>{loading ? '正在核对核销连接…' : centerProblem || `核销已接入相同券中心 · ${coupon.environment === 'production' ? '正式环境' : '测试环境'}`}{couponError && ` ${couponError}`}</span></div>
       <div className="scarfRedemption"><div><strong>领奖核销</strong><p>回到「收银」扫描中奖条码 → 奖品免费入单 → 完成 0 元结算后发放。核销成功后扣减本机商品库存，H5 领取状态同步更新。</p></div>{onCashier && <button type="button" className="utilityButton" disabled={disabled} onClick={onCashier}><ShoppingCart size={17} /> 去收银核销</button>}</div>
+      <LotteryRecords key={`${connection?.url}:${snapshot.campaignId}`} activity="scarf" campaignId={snapshot.campaignId} connectionKey={connection?.url} supported={snapshot.capabilities?.includes(DRAW_RECORDS_CAPABILITY)} />
       {snapshot.campaign.enabled && <p className="lotteryHelp">修改奖品、概率、时间或活动说明前，请先在下方填写原因并暂停新抽奖。</p>}
       <div className="scarfFields">
         <label>活动名称<input value={draft.title} maxLength={60} disabled={editingDisabled} onChange={e => change('title', e.target.value)} /></label>

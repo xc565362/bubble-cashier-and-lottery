@@ -153,7 +153,7 @@ test('an expired session during draw clears protected state and renders a recove
   assert.equal(h.state.staffResult, null);
   assert.equal(h.state.drawing, false);
   assert.match(h.main.innerHTML, /登录已失效/);
-  assert.match(h.main.innerHTML, /重新加载/);
+  assert.match(h.main.innerHTML, /返回小程序重新登录/);
   assert.match(h.main.innerHTML, /从工作人员提供的小程序参与入口重新进入/);
   assert.equal(h.alerts.length, 1);
 });
@@ -341,4 +341,11 @@ test('a rejected draw stops the waiting animation without fabricating a consolat
   assert.equal(h.state.state.entry,null);
   assert.equal(h.modals.length,0);
   assert.equal(h.alerts[0][1],'连接中断');
+});
+
+test('a production backend failure does not present a cached preview scarf or active draw grid',async()=>{
+  const h=harness({isPreview:false,hasSession:()=>true,call:async()=>{throw Object.assign(new Error('服务尚未开放'),{code:'SERVICE_UNAVAILABLE'});}});
+  await h.load();assert.match(h.main.innerHTML,/服务尚未开放/);
+  assert.doesNotMatch(h.main.innerHTML,/lottery-grid|data-action="draw"|reward-art|演示奖品/);
+  assert.equal(h.context.document.querySelector('#preview-banner').hidden,true);
 });

@@ -12,6 +12,13 @@ async function readBody(req, max = 2 * 1024 * 1024) {
 function paymentMiddleware(service, { notifications = false } = {}) {
   return async (req, res, next) => {
     const pathname = req.url.split('?')[0];
+    if (pathname === '/api/online/session' && req.method === 'GET') {
+      res.statusCode = 404;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      res.end(JSON.stringify({ online: false }));
+      return;
+    }
     if (!pathname.startsWith('/api/sqb/')) return next();
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');

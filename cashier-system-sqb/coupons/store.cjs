@@ -163,7 +163,36 @@ function createCouponStore({ file, now = () => Date.now(), environment = 'develo
   }
   function dispatch(actor, action, input = {}) {
     requireRole(actor, ['admin', 'lottery', 'cashier']);
-    if (action === 'info') return { service: 'stall-coupon-center', version: 1, centerId: identity.id, environment: identity.environment, role: actor.role, capabilities:['physical-prize-v1','quota-increase-v1','redemption-deadline-v1','lottery-catalog-v1'] };
+    if (action === 'info') return { service: 'stall-coupon-center', version: 1, centerId: identity.id, environment: identity.environment, role: actor.role, capabilities:['physical-prize-v1','quota-increase-v1','redemption-deadline-v1','lottery-catalog-v1','lottery-record-status-v1'] };
+    if (action === 'lottery-record-status') {
+      requireRole(actor, ['admin']);
+      const plain = value => value && typeof value === 'object' && !Array.isArray(value);
+      const keys = (value, allowed) => plain(value) && Object.keys(value).every(k => allowed.includes(k));
+      const identifier = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(value);
+      if (!keys(input, ['centerId','environment','refs']) || input.centerId !== identity.id || input.environment !== identity.environment) throw problem('CENTER_MISMATCH', '券中心身份不一致', 409);
+      if (!Array.isArray(input.refs) || input.refs.length < 1 || input.refs.length > 50 || input.refs.some(ref => !keys(ref,['recordId','campaignId','owner','awardId','couponId']) || ![ref.recordId,ref.campaignId,ref.owner,ref.awardId].every(identifier) || ref.couponId != null && !identifier(ref.couponId)) || new Set(input.refs.map(r=>r.recordId)).size !== input.refs.length) throw problem('INVALID_INPUT','请提供1至50条不重复的完整中奖引用');
+      // Unlike interactive coupon detail/list, this audit query never calls expire(), code(),
+      // an issuance endpoint or a write transaction. Calculate the current state in memory.
+      const checkedAt = now(), timestampAt = new Date(checkedAt).toISOString();
+      db.exec('BEGIN');
+      try {
+        const items = input.refs.map(ref => {
+          const row = ref.couponId ? db.prepare('SELECT data FROM coupons WHERE id=?').get(ref.couponId) : db.prepare('SELECT data FROM coupons WHERE campaign=? AND owner=? AND award=? AND issuer=?').get(ref.campaignId,ref.owner,ref.awardId,'campaign:'+ref.campaignId);
+          if (!row) return {recordId:ref.recordId,result:'not_found'};
+          const coupon = JSON.parse(row.data);
+          if(coupon.campaignId!==ref.campaignId||coupon.owner!==ref.owner||coupon.awardId!==ref.awardId||coupon.issuer!=='campaign:'+ref.campaignId||coupon.environment!==identity.environment) return {recordId:ref.recordId,result:'mismatch'};
+          let state=coupon.state;
+          if(state==='RESERVED'&&coupon.reservation?.expiresAt<=timestampAt)state='AVAILABLE';
+          if(state==='AVAILABLE'&&deadline(coupon)<=timestampAt)state='EXPIRED';
+          if(!['AVAILABLE','RESERVED','PAYMENT_PENDING','REDEEMED','VOID','EXPIRED'].includes(state))return {recordId:ref.recordId,result:'mismatch'};
+          const redeemedAt=coupon.redeemedAt?Date.parse(coupon.redeemedAt):null;
+          if(state==='REDEEMED'&&(!Number.isSafeInteger(redeemedAt)||redeemedAt<=0))return {recordId:ref.recordId,result:'mismatch'};
+          return {recordId:ref.recordId,result:'verified',couponId:coupon.id,state,redeemedAt:Number.isSafeInteger(redeemedAt)?redeemedAt:null};
+        });
+        db.exec('COMMIT');
+        return {centerId:identity.id,environment:identity.environment,checkedAt,items};
+      } catch (error) { db.exec('ROLLBACK'); throw error; }
+    }
     if (action === 'lottery-issue' || action === 'lottery-coupon') {
       requireRole(actor,['admin']);
       const campaign=campaignFor(actor,text(input.campaignId,'券活动编号'));

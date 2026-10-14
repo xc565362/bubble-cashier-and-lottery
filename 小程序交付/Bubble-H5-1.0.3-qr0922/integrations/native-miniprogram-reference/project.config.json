@@ -1,0 +1,17 @@
+{
+  "appid": "wx3cfec968f30fb6c1",
+  "compileType": "miniprogram",
+  "miniprogramRoot": "miniprogram/",
+  "projectname": "Bubble-lottery-qr-display",
+  "description": "bubble 500人抽奖，抽奖及兑奖截止2026年9月27日24点",
+  "setting": {
+    "es6": true,
+    "postcss": true,
+    "minified": true,
+    "urlCheck": true
+  },
+  "packOptions": {
+    "ignore": []
+  },
+  "condition": {}
+}

@@ -9,6 +9,7 @@ const routes = {
   'POST /v1/campaigns/lottery-provision': 'lottery-provision',
   'POST /v1/lottery/issue': 'lottery-issue',
   'POST /v1/lottery/coupons/detail': 'lottery-coupon',
+  'POST /v1/lottery/records/status': 'lottery-record-status',
   'POST /v1/coupons/detail': 'coupon', 'POST /v1/coupons/void': 'void', 'GET /v1/keys': 'keys',
   'POST /v1/keys': 'create-key', 'POST /v1/keys/revoke': 'revoke-key', 'GET /v1/events': 'events',
   'POST /v1/reservations': 'reserve', 'POST /v1/reservations/detail': 'reservation',

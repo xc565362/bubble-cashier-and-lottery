@@ -1,5 +1,6 @@
 import {escapeHtml as e,dateLabel,safeEntry,parseLaunch,createEpoch,CODE_PATTERN,INVITE_PATTERN,reasonLabel,prizeImage,campaignView,entryPrize} from './core.mjs';
 import {createApi} from './api.mjs';
+import {returnToMiniProgram} from './login-return.mjs';
 import {drawQr,drawBarcode} from './qr.mjs';
 import {createWheel} from './wheel.mjs';
 
@@ -7,7 +8,7 @@ const runtime=window.BUBBLE_H5_CONFIG||{},main=document.querySelector('#main'),m
 const launch=parseLaunch(location.hash);
 history.replaceState(null,'',location.pathname+location.search+`#/${launch.route}`);
 const localPreview=runtime.mode==='preview'&&['localhost','127.0.0.1','[::1]'].includes(location.hostname);
-const api=localPreview?(await import('./preview.mjs')).createPreview(sessionStorage):createApi(runtime);
+const api=localPreview?(await import('./preview.mjs')).createPreview(sessionStorage):createApi(runtime,{onAuthExpired:error=>{authFailure(error);render();}});
 const epoch=createEpoch();
 const S={route:launch.route,invite:launch.inviteCode||(api.isPreview?api.launchInvite():''),inviteDraft:'',state:null,loading:true,error:'',busy:false,drawing:false,mode:'qr',identity:null,staffCode:'',staffResult:null,grant:null,previewOpen:false,scenario:'empty'};
 let refreshTimer,toastTimer,resolveModal,scanStream,scanTimer,scanGeneration=0,wheel=null;
@@ -68,7 +69,7 @@ function render(){
   document.querySelectorAll('.nav .item').forEach(link=>{link.classList.toggle('selected',link.dataset.page===S.route);link.dataset.page===S.route?link.setAttribute('aria-current','page'):link.removeAttribute('aria-current');link.setAttribute('aria-disabled',String(S.busy||S.drawing));});
   if(!S.loading&&!S.error&&S.route!=='staff'&&!S.state)S.error='活动信息暂不可用，请重新加载';
   main.className=`screen ${S.route}`;
-  main.innerHTML=S.loading?'<p class="loading" role="status">正在加载山野好礼…</p>':S.error?heading('山野有约','关注小红书，抽一份山野好礼。')+`<section class="error-box" role="alert"><p>${e(S.error)}</p>${button('重新加载','refresh','secondary')}<p class="hint">${!api.isPreview?'请从工作人员提供的小程序参与入口重新进入。':''}</p></section>`+previewTools():({home,result,rules,staff}[S.route]||home)()+previewTools();
+  main.innerHTML=S.loading?'<p class="loading" role="status">正在加载山野好礼…</p>':S.error?heading('山野有约','关注小红书，抽一份山野好礼。')+`<section class="error-box" role="alert"><p>${e(S.error)}</p>${!api.isPreview&&!api.hasSession()?button('返回小程序重新登录','relogin','secondary'):button('重新加载','refresh','secondary')}<p class="hint">${!api.isPreview?'请从工作人员提供的小程序参与入口重新进入；已中奖结果会为你保留。':''}</p></section>`+previewTools():({home,result,rules,staff}[S.route]||home)()+previewTools();
   if(S.route==='result'&&!S.error&&!S.loading&&S.state?.entry?.status==='pending'){
     const canvas=main.querySelector('canvas');if(canvas)try{S.mode==='qr'?drawQr(canvas,S.state.entry.code):drawBarcode(canvas,S.state.entry.code);}catch(err){canvas.remove();const p=document.createElement('p');p.className='hint';p.textContent=err.message;main.querySelector('.code-display')?.append(p);}
   }
@@ -148,6 +149,7 @@ async function scan(){
 document.addEventListener('click',async event=>{
   const action=event.target.closest('[data-action]');if(event.target.closest('a')&&(S.busy||S.drawing)){event.preventDefault();return;}if(!action||action.disabled)return;
   switch(action.dataset.action){
+    case 'relogin':action.disabled=true;try{await returnToMiniProgram({activity:'scarf',entryPage:runtime.miniProgramLoginPage,route:S.route,inviteCode:S.invite});}catch(error){await alertUser('重新进入活动',error.message);}finally{action.disabled=false;}return;
     case 'draw':return draw();case 'open-result':closeModal(false);return navigate('result');case 'refresh':return load();
     case 'modal-close':return closeModal(false);case 'modal-confirm':return closeModal(true);
     case 'qr':case 'barcode':S.mode=action.dataset.action;render();return;
@@ -169,4 +171,4 @@ window.addEventListener('hashchange',onRoute);window.addEventListener('offline',
 document.addEventListener('visibilitychange',()=>{if(document.hidden)invalidate();else if(!S.drawing&&!S.busy)load();});
 window.addEventListener('resize',()=>{if(S.route==='result'&&!S.loading&&!S.error)render();});
 window.addEventListener('pagehide',()=>{invalidate();api.logout?.();});
-try{if(!api.isPreview&&launch.code)await api.login(launch.code);await load();}catch(err){S.loading=false;S.error=err.message;authFailure(err);render();}
+try{if(!api.isPreview&&(launch.ticket||launch.code))await api.login(launch.ticket?{ticket:launch.ticket}:launch.code);await load();}catch(err){S.loading=false;S.error=err.message;authFailure(err);render();}

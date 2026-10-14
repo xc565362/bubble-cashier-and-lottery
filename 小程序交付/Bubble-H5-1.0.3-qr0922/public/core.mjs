@@ -27,7 +27,8 @@ export function parseLaunch(hash) {
   const params = new URLSearchParams(query || (raw.includes('wx_code=')?raw:''));
   const route = ['home','prize','rules','staff'].includes(path)?path:'home';
   const returnRoute=(params.get('return_route')||'').replace(/^\//,'');
-  return {route,code:params.get('wx_code')||'',returnRoute:['home','prize','rules','staff'].includes(returnRoute)?returnRoute:route};
+  const ticket=params.get('wx_ticket')||'';
+  return {route,code:params.get('wx_code')||'',...(/^HT1\.[A-Za-z0-9_-]{43}$/.test(ticket)?{ticket}:{}),returnRoute:['home','prize','rules','staff'].includes(returnRoute)?returnRoute:route};
 }
 // Invalidating the epoch rejects responses issued before a route/auth/network change.
 export function createEpoch() {

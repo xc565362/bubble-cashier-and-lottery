@@ -1,4 +1,17 @@
-# Build output and dependencies
+# Only these three source projects and named handoff documents belong in Git.
+/*
+!/.gitignore
+!/.gitattributes
+!/README.md
+!/DEPLOYMENT.md
+!/VERIFICATION.md
+!/cashier-system-sqb/
+!/小程序交付/
+/小程序交付/*
+!/小程序交付/Bubble-H5-1.0.3-qr0922/
+!/小程序交付/Bubble-H5-小红书头巾-50/
+
+# Generated files and dependencies
 node_modules/
 dist/
 output/
@@ -8,10 +21,12 @@ tmp/
 .playwright-cli/
 *.log
 *.zip
+*.tar.gz
 *.exe
 *.dmg
 *.asar
-# Runtime data and private configuration
+
+# Private configuration and business data
 .env
 .env.*
 !.env.example
@@ -24,8 +39,15 @@ tmp/
 *.p12
 *.pfx
 *.private.json
+project.private.config.json
 私密配置/
 *加密配置*
 *流水*.csv
+收银系统备份_*.json
+# Local operational evidence contains actual business counts and inventory snapshots.
+/cashier-system-sqb/docs/实物核销切换记录-20260922.md
+/cashier-system-sqb/docs/抽奖联动部署交接-0.7.*.md
+/cashier-system-sqb/docs/lottery-verification-cases-20261013.md
+/cashier-system-sqb/验证记录-0.7.3.md
 .DS_Store
 Thumbs.db

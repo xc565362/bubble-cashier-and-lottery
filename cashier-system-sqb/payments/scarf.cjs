@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { sealCredentials, openCredentials } = require('./credentials.cjs');
+const { recordsQuery, assertRecordsIdentity } = require('./lottery-records.cjs');
 
 const CAMPAIGN_ID = 'scarf-xhs-50-v1';
 function createScarfBridge({ directory, protect = value => value, unprotect = value => value, fetchFn = fetch }) {
@@ -31,7 +32,7 @@ function createScarfBridge({ directory, protect = value => value, unprotect = va
     if (action === 'snapshot' && (result.data?.service !== 'bubble-scarf-management' || result.data.version !== 1 || result.data.campaignId !== CAMPAIGN_ID)) {
       throw new Error('管理接口身份不匹配，请使用山野有约头巾活动接口');
     }
-    return result.data;
+    return action === 'records' ? assertRecordsIdentity(result.data, CAMPAIGN_ID) : result.data;
   }
   async function connect(input) {
     const value = validate(input), target = { ...value, key: protect(value.key) };
@@ -45,6 +46,7 @@ function createScarfBridge({ directory, protect = value => value, unprotect = va
   return { async dispatch(action, input = {}) {
     if (action === 'config') return info();
     if (action === 'snapshot') return request('snapshot');
+    if (action === 'records') return request(action, recordsQuery(input));
     if (busy) throw new Error('头巾活动操作尚未完成，请勿重复提交');
     busy = true;
     try {

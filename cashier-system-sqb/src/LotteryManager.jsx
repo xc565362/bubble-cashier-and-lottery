@@ -5,6 +5,8 @@ import { lotteryDraft, lotteryPayload, percentToBps, prizeDefinition, retirePriz
 import { LotteryPrizeEditor } from './LotteryPrizeEditor.jsx';
 import { ActivityRulesEditor } from './ActivityRulesEditor.jsx';
 import { RULES_TEXT_CAPABILITY } from './rulesText.js';
+import { LotteryRecords } from './LotteryRecords.jsx';
+import { DRAW_RECORDS_CAPABILITY } from './lotteryRecords.js';
 import './lottery.css';
 
 const call = (action, input = {}) => sqbCall('lottery-' + action, input);
@@ -105,6 +107,7 @@ export function LotteryManager({ products = [], onCashier }) {
       {snapshot.centerError && <p className="lotteryNotice dangerText">{snapshot.centerError}</p>}
       <div className={`lotteryNotice ${!loading && centerProblem ? 'dangerText' : ''}`} role="status"><Cloud size={18} /><span>{loading ? '正在核对核销连接…' : centerProblem || `核销已接入相同券中心 · ${coupon.environment === 'production' ? '正式环境' : '测试环境'}`}{couponError && ` ${couponError}`}</span></div>
       <div className="scarfRedemption"><div><strong>领奖核销</strong><p>在「收银」扫描中奖凭证：实物奖品免费入单，点击「零元结算」确认后发放；金额券在购物结算时抵扣。完成后 H5 自动更新为已使用。</p></div>{onCashier && <button type="button" className="utilityButton" disabled={disabled} onClick={onCashier}><ShoppingCart size={17} /> 去收银核销</button>}</div>
+      <LotteryRecords key={`${connection?.url}:${snapshot.campaignId}`} activity="lottery" campaignId={snapshot.campaignId} connectionKey={connection?.url} supported={snapshot.capabilities?.includes(DRAW_RECORDS_CAPABILITY)} />
       <div className="lotteryMode" role="group" aria-label="抽奖模式">{[['inventory', '按剩余名额'], ['fixed', '固定概率']].map(([key, label]) => <button key={key} type="button" aria-pressed={draft.mode === key} disabled={disabled || snapshot.enabled} onClick={() => { setDraft({ ...draft, mode: key }); setConfirmed(false); }}>{label}</button>)}</div>
       <div className="lotteryCatalogHeader"><div><strong>活动奖品 · {displayPrizes.filter(p => !p.retired).length} 项</strong><p className="lotteryHelp">保存到云端后，H5 首页和规则页会自动更新。已有中奖凭证保留原奖品。</p></div><button className="utilityButton" disabled={disabled || snapshot.enabled || !catalogReady} onClick={() => editPrize('add')}><Plus size={17} /> 新增奖项</button></div>
       {!catalogReady && <p className="lotteryNotice">当前云端版本支持名额与概率管理。升级抽奖服务和券服务后可开启奖品增删、图片和商品更换。</p>}

@@ -1,0 +1,1 @@
+<view class="demo" wx:if="{{demo}}">互动演示 · 奖品与核销码仅供体验</view><view class="brand"><text class="wordmark">Bubble</text><text class="name">赛事好礼</text><text class="right">为热爱而行</text></view>

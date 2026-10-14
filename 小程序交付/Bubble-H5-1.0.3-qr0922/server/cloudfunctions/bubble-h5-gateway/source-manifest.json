@@ -2,7 +2,7 @@
   "createdAt": "2026-09-29",
   "updatedAt": "2026-10-13",
   "sourceDirectory": "D:\\2、bubble\\线下\\收银系统\\cashier-system-sqb\\lottery-backend",
-  "sourceType": "local-source-with-catalog-and-rules-text-extension",
+  "sourceType": "local-source-with-catalog-rules-and-draw-records",
   "sourceModifiedLocally": true,
   "onlineDeploymentCompared": false,
   "includesPrivateConfiguration": false,
@@ -58,10 +58,17 @@
       "matchesCanonical": true
     },
     {
+      "name": "draw-records.cjs",
+      "sha256": "72d17b891c02518ead220eddf99ee7d27ba4de21157dde10837bfd75cdcbdea2",
+      "sourceLastWriteTime": "2026-10-13T11:35:38.7285767Z",
+      "bytes": 9404,
+      "matchesCanonical": true
+    },
+    {
       "name": "management-center.cjs",
-      "sha256": "449c2546cf35762a7781389e749767f71909607fd5fb40423bb7b119a89341c1",
-      "sourceLastWriteTime": "2026-10-08 18:53:17",
-      "bytes": 5914,
+      "sha256": "7d624ca772ebbe85fbd88399d0258a710780b2aaa98f4c7f86d10c800240650f",
+      "sourceLastWriteTime": "2026-10-13T11:28:36.5325257Z",
+      "bytes": 6508,
       "matchesCanonical": true
     },
     {
@@ -73,23 +80,23 @@
     },
     {
       "name": "pool-management.cjs",
-      "sha256": "3552aab74bbfeac926c5ee21d0ba3f02ffbf948448d8de73debe8281dade3d24",
-      "sourceLastWriteTime": "2026-10-13T07:41:50.308Z",
-      "bytes": 15808,
+      "sha256": "157f655f87363a65b8a6840e42dbcb89a1422cad17506c44ce386ac1b0c166db",
+      "sourceLastWriteTime": "2026-10-13T11:28:36.5335225Z",
+      "bytes": 15874,
       "matchesCanonical": true
     },
     {
       "name": "service.js",
       "sha256": "1870582689aaf8567a3dce3d3c90cfc889021048dc7e2c93dfebef579d05c66e",
-      "sourceLastWriteTime": "2026-10-13T07:41:50.310Z",
+      "sourceLastWriteTime": "2026-10-13T07:41:50.31Z",
       "bytes": 13829,
       "matchesCanonical": true
     },
     {
       "name": "store.js",
-      "sha256": "b0d08c51ec970f56c3bc870712c0b9ccf1304ca9088c09131d55f3dee7c36480",
-      "sourceLastWriteTime": "2026-09-21 16:20:10",
-      "bytes": 1401,
+      "sha256": "c61737b291e14126399d9656d9fad53df94167f19f2354a2c0c2595a505b981d",
+      "sourceLastWriteTime": "2026-10-13T11:28:36.5301901Z",
+      "bytes": 1492,
       "matchesCanonical": true
     }
   ]

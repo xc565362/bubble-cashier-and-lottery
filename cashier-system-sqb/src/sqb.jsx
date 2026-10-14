@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Barcode, Bell, Check, Download, KeyRound, RefreshCw, Save, ScanLine, ShieldCheck, Upload, X } from 'lucide-react';
 import { ConfirmationCheck } from './ConfirmationCheck.jsx';
+import { getOnlineSession, onlineHeaders } from './onlineApi.js';
 
 export async function enablePaymentNotifications() {
   if (window.sqb) return '系统通知由电脑通知设置控制';
@@ -27,11 +28,13 @@ export async function sqbCall(action, payload = {}) {
   if (window.sqb) result = await window.sqb.call(action, payload);
   else {
     const response = await fetch(`/api/sqb/${action}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), cache: 'no-store',
+      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', ...onlineHeaders() }, body: JSON.stringify(payload), cache: 'no-store',
     });
     try { result = await response.json(); } catch { throw new Error('支付服务未启动，请使用新版桌面软件或本机支付服务'); }
+    if (response.status === 401 && getOnlineSession()) window.dispatchEvent(new Event('online-session-expired'));
+    if (!response.ok) throw Object.assign(new Error(result.error || '支付服务暂不可用'), { code: result.code, status: response.status });
   }
-  if (!result.ok) throw new Error(result.error || '支付服务暂不可用');
+  if (!result.ok) throw Object.assign(new Error(result.error || '支付服务暂不可用'), { code: result.code });
   return result.data;
 }
 
@@ -202,7 +205,12 @@ export function SqbPaymentModal({ order, pending, onBeforeStart, onRecord, onClo
     // Disarm synchronously so consecutive scanner terminators cannot submit twice.
     scanArmed.current = false;
     setCode(''); setWaitingForCode(false);
-    if (!onBeforeStart()) { setConfirmPayment(false); return; }
+    working.current = true; setBusy(true);
+    let prepared = false;
+    try { prepared = await onBeforeStart(); }
+    catch (issue) { setMessage(issue.message); }
+    finally { working.current = false; setBusy(false); }
+    if (!prepared) { setConfirmPayment(false); return; }
     await execute('start', { draft: order, code: paymentCode, confirmTestPayment: testMode && confirmPayment });
   }
   useEffect(() => {
@@ -266,7 +274,7 @@ export function SqbPaymentModal({ order, pending, onBeforeStart, onRecord, onClo
       </div>
     </form>}
     {message && <p className="dangerText" role="alert">{message}</p>}
-    {record?.state === 'paid' && <p className="sqbStatus">收款结果已保留。订单未核对保存前，本浏览器暂停收银；关闭弹窗不会取消付款或清除记录。</p>}
+    {record?.state === 'paid' && <p className="sqbStatus">收款结果已保留。订单未核对保存前，收银保持暂停；关闭弹窗不会取消付款或清除记录。</p>}
     {!ready && !started && <button className="utilityButton" onClick={onSettings}>配置收钱吧</button>}
     {started && <button className="utilityButton" disabled={busy} onClick={() => execute('query', { id: order.id })}><RefreshCw size={18} /> {busy ? '正在查询' : record?.state === 'paid' ? '重试保存订单' : '重新查询支付结果'}</button>}
     {record?.state === 'paid' && <button className="utilityButton" disabled={busy} onClick={closePayment}><X size={18} /> 关闭弹窗，保留待核对</button>}

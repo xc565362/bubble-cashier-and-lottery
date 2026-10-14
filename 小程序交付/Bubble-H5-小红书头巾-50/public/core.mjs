@@ -29,7 +29,8 @@ export function parseLaunch(hash){
   const params=new URLSearchParams(query);const valid=r=>['home','result','rules','staff'].includes(r);
   const route=valid(raw)?raw:'home',back=(params.get('return_route')||'').replace(/^\//,'');
   const invite=(params.get('inviteCode')||'').replace(/[\s-]/g,'').toUpperCase();
-  return {route:valid(back)?back:route,code:params.get('wx_code')||'',inviteCode:INVITE_PATTERN.test(invite)?invite:''};
+  const ticket=params.get('wx_ticket')||'';
+  return {route:valid(back)?back:route,code:params.get('wx_code')||'',...(/^HT1\.[A-Za-z0-9_-]{43}$/.test(ticket)?{ticket}:{}),inviteCode:INVITE_PATTERN.test(invite)?invite:''};
 }
 export const reasonLabel=reason=>({NOT_CONFIGURED:'活动时间尚未公布',PAUSED:'活动暂未开放',NOT_STARTED:'活动还未开始',ENDED:'本次活动已结束',SOLD_OUT:'本期奖品已抽完',ALREADY_DRAWN:'你已参与本次抽奖',READY:''}[reason]||'活动暂不可用');
 export function createEpoch(){let value=0;return {next:()=>++value,current:()=>value,isCurrent:token=>value===token};}

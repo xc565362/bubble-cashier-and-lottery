@@ -10,7 +10,7 @@ const parsed = result => ({...result, json: result.body ? JSON.parse(result.body
 function event(path, body, patch = {}) { return {httpMethod: 'POST', path: config.basePath + path, headers: {Origin: origin, 'Content-Type': 'application/json'}, body: JSON.stringify(body), ...patch}; }
 function fixture(overrides = {}) {
   const calls = [], exchanges = [], rates = []; let time = 1800000000000;
-  const handler = createGateway({config, now: () => time, exchangeCode: async code => { exchanges.push(code); return openId; }, callLottery: async (action, payload, identity) => { calls.push({action, payload, identity}); return {safe: true}; }, consumeRate: async (...args) => { rates.push(args); }, ...overrides});
+  const handler = createGateway({config, now: () => time, exchangeCode: async code => { exchanges.push(code); return openId; }, callLottery: async (action, payload, identity) => { calls.push({action, payload, identity}); return {safe: true}; }, consumeCode: async () => {}, consumeRate: async (...args) => { rates.push(args); }, ...overrides});
   const login = async () => parsed(await handler(event('/session', {code: 'testcode123456'})));
   return {handler, calls, exchanges, rates, login, time: value => { time = value; }, request: async (action, payload = {}, token) => {
     if (token === undefined) token = (await login()).json.data.token;

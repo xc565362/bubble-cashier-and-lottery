@@ -3,6 +3,8 @@ import QRCode from 'qrcode';
 import { couponBarcodeForDisplay, isAwardBarcode } from './couponBarcode.js';
 import { ArrowLeft, ArrowRight, Check, Cloud, Copy, Download, KeyRound, Link, Pause, Play, Plus, QrCode, RefreshCw, Ticket, Trash2, X } from 'lucide-react';
 import { sqbCall } from './sqb.jsx';
+import { getOnlineSession } from './onlineApi.js';
+import { loadCouponWorkspace } from './couponWorkspace.js';
 import './coupons.css';
 
 const labels = { AVAILABLE: '可使用', RESERVED: '使用中', PAYMENT_PENDING: '付款待核实', REDEEMED: '已核销', EXPIRED: '已过期', VOID: '已作废' };
@@ -33,7 +35,8 @@ function CouponBarcode({ code }) {
   </svg>}{error && <small role="status">{error}</small>}<small>结算完成后核销 · 每张券限用一次</small></div>;
 }
 
-export function CouponManager({products = []}) {
+export function CouponManager({products = [], canRecover = true}) {
+  const staff = getOnlineSession()?.user?.role === 'cashier';
   const [bindings,setBindings] = useState({prizes:{}});
   const prizeOptions = [['cap','户外棒球帽（砾石灰）','BB250005'],['bucket','户外渔夫帽（晨雾蓝）','BB250003'],['waist','轻量化运动腰包（海雾蓝）','BB240011'],['tote','超大编织袋','BB260057']];
   const [tab, setTab] = useState('campaigns');
@@ -44,6 +47,7 @@ export function CouponManager({products = []}) {
   const [pending, setPending] = useState([]);
   const [filter, setFilter] = useState({ campaignId: '', state: '', page: 1 });
   const [message, setMessage] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editor, setEditor] = useState(null);
@@ -57,20 +61,15 @@ export function CouponManager({products = []}) {
   useEffect(() => { editorRequest.current = crypto.randomUUID(); }, [editor]);
   async function load() {
     const version = ++generation.current;
-    setLoading(true);
+    setLoading(true); setLoadError('');
     try {
-      const nextConfig = await request('config');
-      const nextCampaigns = await request('campaigns');
-      const nextCoupons = await request('coupons', filter);
-      const nextKeys = await request('keys');
-      const nextPending = await request('sync');
-      const nextBindings = await request('physical-bindings');
+      const next = await loadCouponWorkspace(request, { staff, filter, canRecover });
       if (!alive.current || version !== generation.current) return;
-      setConfig(nextConfig); setCampaigns(nextCampaigns); setCoupons(nextCoupons); setKeys(nextKeys); setPending(nextPending); setBindings(nextBindings);
-    } catch (error) { if (alive.current) setMessage(error.message.includes('不支持') ? '券服务尚未更新，请重新启动新版收银服务' : error.message); }
+      setConfig(next.config); setCampaigns(next.campaigns); setCoupons(next.coupons); setKeys(next.keys); setPending(next.pending); setBindings(next.bindings);
+    } catch (error) { if (alive.current && version === generation.current) setLoadError(error.message.includes('不支持') ? '券服务尚未更新，请重新启动新版收银服务' : error.message); }
     finally { if (alive.current && version === generation.current) setLoading(false); }
   }
-  useEffect(() => { alive.current = true; load(); return () => { alive.current = false; }; }, [filter.campaignId, filter.state, filter.page]);
+  useEffect(() => { alive.current = true; load(); return () => { alive.current = false; generation.current++; }; }, [filter.campaignId, filter.state, filter.page, canRecover]);
   useEffect(() => {
     let cancelled = false; setQr('');
     if (detail?.state === 'AVAILABLE' && detail.code && !isAwardBarcode(detail.code)) QRCode.toDataURL(detail.code, { width: 280, margin: 2, errorCorrectionLevel: 'M' }).then(value => { if (!cancelled) setQr(value); }).catch(() => { if (!cancelled) setMessage('二维码生成失败'); });
@@ -98,13 +97,24 @@ export function CouponManager({products = []}) {
     else if (editor.type === 'key') run(() => mutation('create-key', { requestId: editorRequest.current, name: input.name, role: 'lottery', campaignId: input.campaignId }), value => { setEditor(null); setSecret(value); });
     else if (editor.type === 'connect') run(() => request('connect', { mode: 'remote', baseUrl: input.baseUrl, adminToken: input.adminToken }), () => setEditor(null));
   };
+  if (staff) return <section className="workspace fullWorkspace couponManager" aria-label="兑奖恢复">
+    <div className="sectionHeader"><h2><Ticket size={21} /> 兑奖恢复</h2><button className="utilityButton" disabled={busy || loading} onClick={load}><RefreshCw size={18} /> 核对券状态</button></div>
+    <p>扫码后遇到断网或刷新，可在这里核对尚未完成的领取。先取得收银权限；未发起结算的占用可释放后重新扫码，已进入结算的订单请回到收银台继续核对。</p>
+    {!canRecover && <p className="lotteryHelp">当前显示服务器最近保存的待处理记录；取得收银权限后才能重新核对或释放占用。</p>}
+    {message && <div className="couponMessage" role="status">{message}</div>}
+    {loadError && <p className="dangerText" role="alert">{loadError}</p>}
+    {loading ? <div className="couponLoading" role="status">正在核对领取状态</div> : loadError ? null : pending.length ? pending.map(row => <div className="couponKey" key={row.id}>
+      <div><strong>{row.coupon?.name || '抽奖奖品'}</strong><small>{labels[row.coupon?.state] || '待核对'} · {row.error || row.orderId || row.id}</small></div>
+      {row.canRelease === true ? <button className="utilityButton" disabled={busy || !canRecover} onClick={() => run(() => request('release', { id: row.id }))}>释放并重新扫码</button> : <span>请在收银台继续核对</span>}
+    </div>) : <p className="couponEmpty">暂无待处理领取</p>}
+  </section>;
   return <section className="workspace fullWorkspace couponManager" aria-label="券管理">
     <div className="sectionHeader"><h2><Ticket size={21} /> 券管理</h2><div className="couponTools">
       <button className="iconButton" title="刷新券状态" aria-label="刷新券状态" disabled={busy || loading} onClick={load}><RefreshCw size={18} /></button>
       <button className="utilityButton" disabled={busy} onClick={() => setEditor({ type: 'connect' })}><Link size={17} /> 云端连接</button>
     </div></div>
-    <div className={`couponConnection ${config?.integrationReady ? 'connected' : ''}`} role="status"><Cloud size={18} /><div>
-      <strong>{config?.integrationReady ? '正式券服务已连接' : config?.mode === 'remote' ? '云端测试环境' : config ? '本机联调 · 尚未连接小程序券中心' : '券服务连接待核对'}</strong>
+    <div className={`couponConnection ${!loading && !loadError && config?.integrationReady ? 'connected' : ''}`} role="status"><Cloud size={18} /><div>
+      <strong>{loading ? '正在核对券服务连接…' : loadError ? '券服务连接待核对' : config?.integrationReady ? '正式券服务已连接' : config?.mode === 'remote' ? '云端测试环境' : config ? '本机联调 · 尚未连接小程序券中心' : '券服务连接待核对'}</strong>
       {config?.baseUrl && <small>{config.baseUrl}</small>}
       {config?.mode === 'remote' && <small>{config.physicalSupported ? '实物兑奖接口已支持 · 商品绑定另行核对' : '实物兑奖接口待服务器升级'}</small>}
     </div></div>
@@ -113,6 +123,8 @@ export function CouponManager({products = []}) {
       {[['campaigns', '券活动'], ['coupons', '发放记录'], ['physical','实物商品绑定'], ['integration', '小程序接入']].map(([key, label]) => <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)}>{label}</button>)}
     </div>
     {loading && <div className="couponLoading" role="status">正在读取券数据</div>}
+    {loadError && <p className="dangerText" role="alert">{loadError} · 本次未能核对最新券数据，请刷新重试。</p>}
+    {!loading && !loadError && <>
     {tab === 'campaigns' && <div role="tabpanel" aria-label="券活动">
       <div className="couponToolbar"><span>{campaigns.length} 个活动</span><button className="submitButton" disabled={busy || !config} onClick={() => setEditor({ type: 'campaign' })}><Plus size={17} /> 创建券活动</button></div>
       {!loading && !campaigns.length && <div className="couponEmpty"><Ticket size={28} /><h3>暂无券活动</h3></div>}
@@ -155,9 +167,11 @@ export function CouponManager({products = []}) {
       <div className="couponToolbar"><h3>抽奖后台凭证</h3><button className="utilityButton" disabled={busy || !campaigns.length} onClick={() => setEditor({ type: 'key' })}><KeyRound size={17} /> 新建接入凭证</button></div>
       {keys.filter(k => k.role === 'lottery').map(k => <div className="couponKey" key={k.id}><div><strong>{k.name}</strong><small>{campaigns.find(c => c.id === k.campaignId)?.name} · {k.enabled ? '有效' : '已停用'}</small></div><button className="iconButton" title="停用凭证" aria-label={`停用${k.name}`} disabled={busy || !k.enabled} onClick={() => { if (window.confirm('停用后，此凭证将无法发券和查询。确认停用？')) run(() => mutation('revoke-key', { id: k.id })); }}><Trash2 size={17} /></button></div>)}
       <dl className="couponEndpoint"><div><dt>服务地址</dt><dd>{config?.baseUrl || '未配置线上地址'}</dd></div><div><dt>发券接口</dt><dd><code>POST /v1/coupons/issue</code></dd></div><div><dt>用户券列表</dt><dd><code>GET /v1/coupons?owner=用户标识</code></dd></div><div><dt>接口版本</dt><dd>v1 · 仅限后台凭证调用</dd></div></dl>
-      <div className="couponToolbar"><h3>本机占用 / 待同步</h3><button className="utilityButton" disabled={busy} onClick={() => run(() => request('sync'), setPending)}><RefreshCw size={17} /> 核对券状态</button></div>
-      {pending.length ? pending.map(row => <div className="couponKey" key={row.id}><div><strong>{row.coupon.name}</strong><small>{labels[row.coupon.state]} · {row.error || row.orderId || row.id}</small></div>{row.canRelease && <button className="utilityButton" disabled={busy} onClick={() => run(() => request('release', { id: row.id }))}>释放</button>}</div>) : <p className="couponEmpty">暂无待处理券</p>}
+      <div className="couponToolbar"><h3>收银占用 / 待同步</h3><button className="utilityButton" disabled={busy || !canRecover} onClick={() => run(() => request('sync'), setPending)}><RefreshCw size={17} /> 核对券状态</button></div>
+      {!canRecover && <p className="lotteryHelp">待处理领取显示服务器最近保存的记录；取得收银权限后才能重新核对或释放占用。</p>}
+      {pending.length ? pending.map(row => <div className="couponKey" key={row.id}><div><strong>{row.coupon.name}</strong><small>{labels[row.coupon.state]} · {row.error || row.orderId || row.id}</small></div>{row.canRelease && <button className="utilityButton" disabled={busy || !canRecover} onClick={() => run(() => request('release', { id: row.id }))}>释放</button>}</div>) : <p className="couponEmpty">暂无待处理券</p>}
     </div>}
+    </>}
     {editor && <div className="modalBackdrop"><form className="modal couponEditor" role="dialog" aria-modal="true" aria-label={{ campaign: '创建券活动', issue: '发券', key: '新建接入凭证', connect: '云端连接' }[editor.type]} onSubmit={submit}>
       <div className="modalHead"><h2>{{ campaign: '创建券活动', issue: '发券', key: '新建接入凭证', connect: '云端连接' }[editor.type]}</h2><button className="iconButton" type="button" aria-label="关闭券编辑" disabled={busy} onClick={() => setEditor(null)}><X size={20} /></button></div>
       <fieldset disabled={busy} className="couponForm">

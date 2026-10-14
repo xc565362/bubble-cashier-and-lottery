@@ -1,0 +1,1 @@
+Component({properties:{active:String,locked:Boolean},methods:{go(event){if(this.data.locked)return;const page=event.currentTarget.dataset.page;if(page===this.data.active)return;wx.redirectTo({url:`/pages/${page}/${page}`});}}});

@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { sealCredentials, openCredentials } = require('./credentials.cjs');
+const { recordsQuery, assertRecordsIdentity } = require('./lottery-records.cjs');
 
 function createLotteryBridge({ directory, protect = value => value, unprotect = value => value, fetchFn = fetch }) {
   const file = path.join(directory, 'lottery-management.json');
@@ -25,7 +26,7 @@ function createLotteryBridge({ directory, protect = value => value, unprotect = 
     try { result = await response.json(); } catch { throw new Error('管理接口返回格式异常，请核对地址'); }
     if (!response.ok || result.ok !== true) throw Object.assign(new Error(result.error || '云端管理请求未完成，请刷新核对后重试'), { code: result.code });
     if (action === 'snapshot' && (result.data?.service !== 'bubble-lottery-management' || result.data.version !== 1 || result.data.campaignId !== target.campaignId)) throw new Error('云端管理活动身份不匹配');
-    return result.data;
+    return action === 'records' ? assertRecordsIdentity(result.data, target.campaignId) : result.data;
   }
   async function connect(input) {
     const valid = validate(input);
@@ -41,6 +42,7 @@ function createLotteryBridge({ directory, protect = value => value, unprotect = 
   return { async dispatch(action, input = {}) {
     if (action === 'config') return info();
     if (action === 'snapshot') return request(action);
+    if (action === 'records') return request(action, recordsQuery(input));
     if (busy) throw new Error('抽奖管理操作尚未完成，请勿重复提交');
     busy = true;
     try {
