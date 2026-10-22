@@ -6,12 +6,14 @@ const path = require('node:path');
 const FINANCIAL = new Set(['pending', 'start', 'query', 'acknowledge', 'resolve-missing-payment',
   'preview-adjustment', 'start-adjustment', 'claim-payment-notification', 'coupon-reserve',
   'coupon-release', 'coupon-zero', 'coupon-zero-ack', 'coupon-sync', 'coupon-fulfilment', 'coupon-bind-physical-products']);
-const STAFF_READ = new Set(['config', 'coupon-config', 'coupon-physical-bindings', 'coupon-pending']);
+const STAFF_READ = new Set(['config', 'coupon-config', 'coupon-physical-bindings', 'coupon-pending',
+  'h5lottery-config', 'h5lottery-records', 'h5lottery-lookup', 'h5lottery-redeem']);
 const ADMIN = new Set(['save-config', 'generate-key', 'import-credentials', 'export-credentials', 'check-connection', 'diagnostics',
   'coupon-connect', 'coupon-bind-physical-products', 'coupon-campaigns', 'coupon-create-campaign', 'coupon-set-campaign',
   'coupon-coupons', 'coupon-coupon', 'coupon-issue', 'coupon-keys', 'coupon-create-key', 'coupon-revoke-key', 'coupon-void', 'coupon-events',
   'lottery-config', 'lottery-snapshot', 'lottery-records', 'lottery-connect', 'lottery-update', 'lottery-increase-capacity', 'lottery-export-connection', 'lottery-import-connection',
-  'scarf-config', 'scarf-snapshot', 'scarf-records', 'scarf-connect', 'scarf-update', 'scarf-export-connection', 'scarf-import-connection']);
+  'scarf-config', 'scarf-snapshot', 'scarf-records', 'scarf-connect', 'scarf-update', 'scarf-export-connection', 'scarf-import-connection',
+  'h5lottery-connect', 'h5lottery-export-csv']);
 const SENSITIVE_CONFIG = new Set(['save-config', 'generate-key', 'import-credentials', 'check-connection', 'coupon-connect', 'coupon-bind-physical-products']);
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',

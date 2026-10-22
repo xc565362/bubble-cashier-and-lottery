@@ -31,7 +31,8 @@ npm test                     # 连接真实配置的 DB 跑测试（随机活动
 ## 配置
 
 `campaign.config.json` 是活动定义的源头：`active`、`startsAt`/`endsAt`/`redeemEndsAt`
-（ISO 时间，建议带 `+08:00`）、`prizes`（`id/name/kind(cash|physical)/qty/probability/label/icon/amount`）。
+（ISO 时间，建议带 `+08:00`）、`prizes`（`id/name/kind(cash|physical)/qty/probability/label/icon/amount`，
+现金奖项可带 `minimumCents` 抵扣门槛，单位分）。
 每次启动会把活动行 upsert 进 `hd_campaigns`、把奖品同步进 `hd_prizes`；改文件后重启生效，
 或用下方管理接口热更新（同样会同步到 DB）。
 
@@ -82,8 +83,38 @@ curl -X POST http://localhost:8787/api/call \
 
 ## 与旧系统的差异
 
-- 立减金不再对接微信收银券体系：所有奖品统一为“现场出示核销码 → 收银/工作人员核销”。
-  `checkoutCoupon` 恒为 false，没有 `using`/`issuing` 等中间态。
+- 立减金不再对接微信收银券体系。未接入券中心时，所有奖品统一为"现场出示核销码 → 收银/工作人员核销"，
+  `checkoutCoupon` 恒为 false，没有 `using`/`issuing` 等中间态；接入券中心后现金奖项自动转为
+  收银台抵扣券（见下节"券中心联动"）。
 - `state` 只读；旧系统的懒重发行为已移除。
 - 不支持 `wx_ticket` 登录方式，小程序跳转请传 `wx_code`。
-- 库存抽完时持久化“未中奖”entry，前端显示为“券状态待同步”样式的占位（边界情况，500 份发完才会出现）。
+- 库存抽完时持久化"未中奖"entry，前端显示为"券状态待同步"样式的占位（边界情况，500 份发完才会出现）。
+
+## 券中心联动（现金奖项 → 收银抵扣券）
+
+配置接入后，抽中现金奖项（`kind=cash` 且配置面额 `amount`）会在券中心真实发券：
+券码与中奖记录的 16 位核销码相同，中奖 H5 直接出示该码，收银台扫码即在结算中抵扣面额。
+发券在抽奖入库之后进行；失败不会丢失中奖结果——该 entry 状态显示为 `issuing`（前端隐藏券码、
+3 秒轮询），工作人员可用 `retry-coupon-issue` 补齐。
+
+配置方式（二选一；都不配置时行为与未接入完全一致）：
+
+1. 环境变量（单一券活动，覆盖面额匹配的现金奖项）：
+   `COUPON_CENTER_URL`（必须 HTTPS，本机回环可用 http）+ `COUPON_LOTTERY_KEY`（券中心 lottery 角色密钥）
+   + `COUPON_CAMPAIGN_ID`（该密钥所属的券活动编号）。
+2. `scripts/provision-coupons.mjs` 一键准备（多面额推荐）：给定 `COUPON_CENTER_URL` 与
+   `COUPON_ADMIN_TOKEN`，按 `campaign.config.json` 的现金奖项逐个幂等创建券活动与 lottery 密钥，
+   并把授权写入 `.coupon-bridge.json`（权限 600，已加入 .gitignore，切勿外传）。环境变量缺省时
+   服务自动加载该文件。
+
+安全行为：
+
+- 发券前服务端会向券中心核对券活动的类型/面额/门槛与奖项配置一致，不一致的奖项不会发券。
+- 发券幂等：`requestId` 由券活动、openid、券码确定性生成，且券中心按 `(issuer, award)` 唯一约束
+  去重；重试、重复抽奖、服务重启都不会重复发券。
+- 接入后现金奖项不能在 `redeem` 现场核销（返回 `CHECKOUT_COUPON`，409），统一在收银台随结算核销，
+  避免一次中奖两次使用。
+- `GET /api/admin/records` 的汇总含 `couponIssuesPending`（本进程内发券失败且尚未补齐的条数；
+  进程重启后归零，重扫请以 `retry-coupon-issue` 为准）。
+- `POST /api/call` `{action:'retry-coupon-issue'}`（需工作人员密钥）→ 全量扫描现金奖项中奖记录，
+  幂等补发缺失的券，返回 `{enabled, checked, confirmed, failed, pending}`。

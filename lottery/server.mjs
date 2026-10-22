@@ -7,6 +7,7 @@ import { loadConfig, saveConfig } from './src/config.js';
 import { code2session } from './src/wechat.js';
 import { BizError } from './src/errors.js';
 import { newToken, hashToken, isStaffKey, maskOpenid } from './src/auth.js';
+import { loadCouponBridgeConfig, createCouponIssuer } from './src/coupons.js';
 import * as lottery from './src/lottery.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -71,7 +72,35 @@ function csvEscape(value) {
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
-export async function createApp({ configPath, env = process.env } = {}) {
+// bubble-event/1 manifest: the cashier's generic event bridge
+// (cashier-v2/payments/event-bridge.cjs) discovers this campaign from it, so
+// no cashier-side code changes are needed per event. No auth required.
+function buildManifest(config) {
+  const benefits = {};
+  for (const prize of config.prizes) {
+    benefits[prize.id] = prize.kind === 'cash'
+      ? { kind: 'cash', ...(Number.isFinite(prize.amount) && prize.amount > 0 ? { amountCents: Math.round(prize.amount * 100) } : {}) }
+      : { kind: 'physical' };
+  }
+  return {
+    protocol: 'bubble-event/1',
+    service: config.id,
+    version: 1,
+    display: {
+      title: config.title || config.name,
+      recordFields: [
+        { key: 'code', label: '核销码', type: 'code' },
+        { key: 'prize', label: '奖品', type: 'text' },
+        { key: 'status', label: '状态', type: 'enum', values: ['pending', 'redeemed'] },
+        { key: 'createdAt', label: '时间', type: 'timestamp' },
+      ],
+    },
+    benefits,
+    actions: ['records', 'lookup', 'redeem', 'export'],
+  };
+}
+
+export async function createApp({ configPath, env = process.env, bridgeFile } = {}) {
   for (const key of ['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD']) {
     if (!env[key]) throw new Error(`缺少数据库配置 ${key}，请在 .env.local 中填写`);
   }
@@ -89,6 +118,15 @@ export async function createApp({ configPath, env = process.env } = {}) {
   const staffKey = env.STAFF_KEY || '';
   const staffOpenids = String(env.STAFF_OPENIDS || '').split(',').map(s => s.trim()).filter(Boolean);
   const wx = { appid: env.WX_APPID || '', secret: env.WX_SECRET || '', mock: env.WX_MOCK === '1' || !env.WX_SECRET };
+
+  // Coupon-center bridge (cash prizes become real checkout coupons). Null when
+  // unconfigured: the campaign then runs in pure booth-redemption mode.
+  const couponBridge = loadCouponBridgeConfig({ env, file: bridgeFile || path.join(ROOT, '.coupon-bridge.json'), campaignId: config.id });
+  const coupons = couponBridge ? createCouponIssuer(couponBridge) : null;
+  if (coupons) {
+    const uncovered = config.prizes.filter(p => p.kind === 'cash' && !coupons.configured(p.id)).map(p => p.id);
+    if (uncovered.length) console.error(`[coupon-bridge] 以下现金奖项没有券中心授权，将按现场核销处理：${uncovered.join(', ')}`);
+  }
 
   const sessionOpenid = async req => {
     const match = /^Bearer (\S+)$/.exec(req.headers.authorization || '');
@@ -130,8 +168,8 @@ export async function createApp({ configPath, env = process.env } = {}) {
 
     if (action === 'state' || action === 'draw' || action === 'identity') {
       if (!openid) throw new BizError('AUTH_REQUIRED', '登录已失效，请返回小程序重新进入活动', 401);
-      if (action === 'state') return sendJson(res, 200, { ok: true, data: await lottery.getState(pool, config, openid, now) });
-      if (action === 'draw') return sendJson(res, 200, { ok: true, data: await lottery.draw(pool, config, openid, now) });
+      if (action === 'state') return sendJson(res, 200, { ok: true, data: await lottery.getState(pool, config, openid, now, coupons) });
+      if (action === 'draw') return sendJson(res, 200, { ok: true, data: await lottery.draw(pool, config, openid, now, undefined, coupons) });
       return sendJson(res, 200, { ok: true, data: { openId: openid, isAdmin: !!isStaff(req, openid) } });
     }
 
@@ -146,9 +184,20 @@ export async function createApp({ configPath, env = process.env } = {}) {
       }
       const staffId = openid ? 'wx:' + maskOpenid(openid) : 'staff-key';
       const data = action === 'lookup'
-        ? await lottery.lookup(pool, config, payload.code, now)
-        : await lottery.redeem(pool, config, payload.code, staffId, now);
+        ? await lottery.lookup(pool, config, payload.code, now, coupons)
+        : await lottery.redeem(pool, config, payload.code, staffId, now, coupons);
       return sendJson(res, 200, { ok: true, data });
+    }
+
+    if (action === 'retry-coupon-issue') {
+      // Staff-only recovery: sweep cash-prize entries and re-issue any missing
+      // coupons. Idempotent — never double-issues an entry code.
+      if (!isStaff(req, openid)) {
+        const keyPresented = typeof req.headers['x-staff-key'] === 'string' && req.headers['x-staff-key'].length > 0;
+        if (openid || keyPresented) throw new BizError('FORBIDDEN', '当前账号没有核销权限', 403);
+        throw new BizError('AUTH_REQUIRED', '需要工作人员密钥或已授权的工作人员账号', 401);
+      }
+      return sendJson(res, 200, { ok: true, data: await lottery.retryCouponIssues(pool, config, coupons, now) });
     }
 
     throw new BizError('INVALID_ACTION', '不支持的操作', 400);
@@ -156,12 +205,12 @@ export async function createApp({ configPath, env = process.env } = {}) {
 
   async function handleAdminRecords(req, res) {
     if (!requireStaffKey(req, res)) return;
-    sendJson(res, 200, { ok: true, data: await lottery.listRecords(pool, config) });
+    sendJson(res, 200, { ok: true, data: await lottery.listRecords(pool, config, coupons) });
   }
 
   async function handleAdminCsv(req, res) {
     if (!requireStaffKey(req, res)) return;
-    const { records } = await lottery.listRecords(pool, config);
+    const { records } = await lottery.listRecords(pool, config, coupons);
     const fmt = ms => (ms ? new Date(ms).toISOString() : '');
     const lines = ['code,prize,status,openid,createdAt,redeemedAt,redeemedBy'];
     for (const r of records) {
@@ -181,16 +230,25 @@ export async function createApp({ configPath, env = process.env } = {}) {
     }
     config = saveConfig(configFile, current);
     await syncCampaign(pool, config);
-    sendJson(res, 200, { ok: true, data: { campaign: (await lottery.getState(pool, config, '__admin__')).campaign } });
+    sendJson(res, 200, { ok: true, data: { campaign: (await lottery.getState(pool, config, '__admin__', Date.now(), coupons)).campaign } });
   }
 
   const server = http.createServer(async (req, res) => {
+    const accessStarted = Date.now();
+    res.on('finish', () => {
+      try {
+        console.log(JSON.stringify({ ts: new Date().toISOString(), service: 'lottery', method: req.method,
+          path: String(req.url || '').split('?')[0].slice(0, 200), status: res.statusCode, ms: Date.now() - accessStarted,
+          ip: req.socket?.remoteAddress || '' }));
+      } catch {}
+    });
     try {
       const url = new URL(req.url, 'http://localhost');
       // Accept both /api/* (direct/local) and /huodong-api/* (production nginx prefix).
       const pathname = url.pathname.replace(/^\/huodong-api(?=\/)/, '/api');
       if (pathname === '/api/session' && req.method === 'POST') return await handleSession(req, res);
       if (pathname === '/api/call' && req.method === 'POST') return await handleCall(req, res);
+      if (pathname === '/api/manifest' && req.method === 'GET') return sendJson(res, 200, buildManifest(config));
       if (pathname === '/api/admin/records' && req.method === 'GET') return await handleAdminRecords(req, res);
       if (pathname === '/api/admin/records.csv' && req.method === 'GET') return await handleAdminCsv(req, res);
       if (pathname === '/api/admin/config' && req.method === 'POST') return await handleAdminConfig(req, res);
@@ -208,17 +266,17 @@ export async function createApp({ configPath, env = process.env } = {}) {
     }
   });
 
-  return { server, pool, getConfig: () => config };
+  return { server, pool, getConfig: () => config, couponsEnabled: !!coupons };
 }
 
 const isMain = (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) || process.env.pm_id !== undefined;
 if (isMain) {
   const port = Number(process.env.PORT) || 8787;
   try {
-    const { server } = await createApp();
+    const { server, couponsEnabled } = await createApp();
     server.listen(port, () => {
       const mock = process.env.WX_MOCK === '1' || !process.env.WX_SECRET;
-      console.log(`bubble lottery listening on http://localhost:${port} (wechat ${mock ? 'MOCK' : 'real'} mode)`);
+      console.log(`bubble lottery listening on http://localhost:${port} (wechat ${mock ? 'MOCK' : 'real'} mode, coupon bridge ${couponsEnabled ? 'ON' : 'off'})`);
     });
   } catch (error) {
     console.error(error.message);

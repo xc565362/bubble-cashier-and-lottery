@@ -31,6 +31,8 @@ async function startServer(configOverrides = {}, env = {}) {
   fs.writeFileSync(configPath, JSON.stringify(makeConfig(campaignId, configOverrides)));
   const app = await createApp({
     configPath,
+    // Never pick up a real .coupon-bridge.json from the repo root.
+    bridgeFile: path.join(dir, 'no-bridge.json'),
     env: { ...process.env, STAFF_KEY, WX_MOCK: '1', ...env },
   });
   await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));

@@ -2,5 +2,5 @@
 window.BUBBLE_H5_CONFIG = Object.freeze({
   mode: 'production',
   apiBase: '/huodong-api',
-  miniProgramLoginPage: '/pages/bubble-h5/index'
+  miniProgramLoginPage: '/pages/webview/webview'
 });

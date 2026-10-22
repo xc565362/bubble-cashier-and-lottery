@@ -23,9 +23,10 @@ function publicPrize(prize) {
 }
 
 // Shape consumed by public/app.mjs + core.mjs safeEntry(). Statuses stay within
-// core.mjs VALID_STATUSES: pending | redeemed | expired (derived) | unavailable
+// core.mjs VALID_STATUSES: pending | issuing (cash coupon minting failed, code
+// hidden until retry succeeds) | redeemed | expired (derived) | unavailable
 // (the persisted "no prize" outcome, when the pool was already empty).
-function publicEntry(row, config, now) {
+function publicEntry(row, config, now, coupons = null) {
   if (!row) return null;
   if (isNoPrize(row)) {
     return {
@@ -35,11 +36,14 @@ function publicEntry(row, config, now) {
     };
   }
   const prize = config.prizes.find(p => p.id === row.prize_id);
+  const checkoutCoupon = !!(coupons && prize && prize.kind === 'cash' && coupons.configured(prize.id));
   const status = row.status === 'redeemed' ? 'redeemed'
-    : (config.redeemEndsAt && now >= config.redeemEndsAt ? 'expired' : 'pending');
+    : (config.redeemEndsAt && now >= config.redeemEndsAt ? 'expired'
+    : (checkoutCoupon && coupons.isFailed(row.code) ? 'issuing' : 'pending'));
   return {
     prize: publicPrize(prize), code: row.code, createdAt: datetimeToMs(row.created_at), status,
-    checkoutCoupon: false, expiresAt: config.redeemEndsAt, minimumGoodsAmountCents: null,
+    checkoutCoupon, expiresAt: config.redeemEndsAt,
+    minimumGoodsAmountCents: checkoutCoupon ? (prize.minimumCents ?? 0) : null,
     redeemedAt: datetimeToMs(row.redeemed_at) || null,
   };
 }
@@ -53,7 +57,7 @@ function drawError(config, remaining, now) {
 }
 
 // Read-only: never writes (no lazy re-issue like the old system).
-export async function getState(pool, config, openid, now = Date.now()) {
+export async function getState(pool, config, openid, now = Date.now(), coupons = null) {
   const [rows] = await pool.query(
     'SELECT * FROM hd_entries WHERE campaign_id = ? AND openid = ?', [config.id, openid]);
   const { total, remaining } = await inventoryTotals(pool, config.id);
@@ -68,7 +72,7 @@ export async function getState(pool, config, openid, now = Date.now()) {
     prizes: config.prizes.map(p => ({ ...publicPrize(p), quantity: p.qty })),
     inventory: { total, remaining },
     drawError: rows.length ? null : (error ? error.message : null),
-    entry: publicEntry(rows[0], config, now),
+    entry: publicEntry(rows[0], config, now, coupons),
   };
 }
 
@@ -91,6 +95,16 @@ function defaultRandomUnit() {
   return crypto.randomBytes(6).readUIntBE(0, 6) / 2 ** 48;
 }
 
+// Mint the coupon for a cash-prize entry (best effort; never throws). Physical
+// and no-prize entries, and cash prizes without a provisioned grant, are
+// untouched so the booth flow stays exactly as before.
+async function issueForEntry(coupons, config, row) {
+  if (!coupons || !row || isNoPrize(row) || !CODE_PATTERN.test(row.code || '')) return;
+  const prize = config.prizes.find(p => p.id === row.prize_id);
+  if (!prize || prize.kind !== 'cash' || !coupons.configured(prize.id)) return;
+  await coupons.issueEntry({ prize, owner: row.openid, code: row.code });
+}
+
 const INSERT_ENTRY =
   'INSERT INTO hd_entries (campaign_id, openid, prize_id, code, status, created_at) VALUES (?, ?, ?, ?, ?, ?)';
 
@@ -98,8 +112,10 @@ const INSERT_ENTRY =
 // unchanged, including the persisted "no prize" outcome. Concurrency safety
 // comes from UNIQUE(campaign_id, openid) (a lost race re-reads and returns the
 // winner's entry) and from the conditional stock decrement (a lost race retries
-// with fresh stock).
-export async function draw(pool, config, openid, now = Date.now(), randomUnit = defaultRandomUnit) {
+// with fresh stock). Cash-prize wins mint a real coupon in the coupon center
+// after the entry commits; the issuance is idempotent (the entry code is the
+// coupon code) and its failure never loses the draw.
+export async function draw(pool, config, openid, now = Date.now(), randomUnit = defaultRandomUnit, coupons = null) {
   for (let attempt = 0; attempt < 4; attempt++) {
     const conn = await pool.getConnection();
     try {
@@ -108,7 +124,9 @@ export async function draw(pool, config, openid, now = Date.now(), randomUnit = 
         'SELECT * FROM hd_entries WHERE campaign_id = ? AND openid = ?', [config.id, openid]);
       if (existing.length) {
         await conn.commit();
-        return publicEntry(existing[0], config, now);
+        // Self-heal: a repeat draw re-attempts a previously failed issuance.
+        if (coupons?.isFailed(existing[0].code)) await issueForEntry(coupons, config, existing[0]);
+        return publicEntry(existing[0], config, now, coupons);
       }
       const { remaining } = await inventoryTotals(pool, config.id, conn);
       const blocked = drawError(config, remaining, now);
@@ -154,7 +172,10 @@ export async function draw(pool, config, openid, now = Date.now(), randomUnit = 
       const [rows] = await conn.query(
         'SELECT * FROM hd_entries WHERE campaign_id = ? AND openid = ?', [config.id, openid]);
       await conn.commit();
-      return publicEntry(rows[0], config, now);
+      // Issuance runs after the commit: no DB locks are held across the network
+      // call, and a crash in between is covered by the retry-coupon-issue sweep.
+      await issueForEntry(coupons, config, rows[0]);
+      return publicEntry(rows[0], config, now, coupons);
     } catch (error) {
       await conn.rollback().catch(() => {});
       // Concurrent draw by the same user: the next pass re-reads and returns it.
@@ -176,21 +197,28 @@ async function findByCode(pool, config, code, queryable = pool) {
   return entry;
 }
 
-export async function lookup(pool, config, rawCode, now = Date.now()) {
+export async function lookup(pool, config, rawCode, now = Date.now(), coupons = null) {
   const entry = await findByCode(pool, config, normalizeCode(rawCode));
-  return { ...publicEntry(entry, config, now), winner: maskOpenid(entry.openid) };
+  return { ...publicEntry(entry, config, now, coupons), winner: maskOpenid(entry.openid) };
 }
 
 // Redeem rule: any pending code may be redeemed until redeemEndsAt; after that
 // it is rejected as EXPIRED (matching the "已过期" status the winner already
 // sees in the H5). The conditional UPDATE makes redemption single-use even
 // under concurrent requests: the loser sees affectedRows 0 -> ALREADY_REDEEMED.
-export async function redeem(pool, config, rawCode, staffId, now = Date.now()) {
+// Cash prizes wired to the coupon center are redeemed at the cashier till
+// (coupon commit on payment), never at this booth endpoint — otherwise the same
+// win could be spent twice.
+export async function redeem(pool, config, rawCode, staffId, now = Date.now(), coupons = null) {
   const code = normalizeCode(rawCode);
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
     const entry = await findByCode(pool, config, code, conn);
+    const prize = config.prizes.find(p => p.id === entry.prize_id);
+    if (prize?.kind === 'cash' && coupons?.configured(prize.id)) {
+      throw new BizError('CHECKOUT_COUPON', '立减金需在收银台结算时扫码抵扣，不能在此核销', 409);
+    }
     if (entry.status === 'redeemed') throw new BizError('ALREADY_REDEEMED', '此奖品已核销，请勿重复发放', 409);
     if (config.redeemEndsAt && now >= config.redeemEndsAt) throw new BizError('EXPIRED', '该奖品已超过核销期限', 410);
     const [result] = await conn.query(
@@ -200,7 +228,7 @@ export async function redeem(pool, config, rawCode, staffId, now = Date.now()) {
     const [rows] = await conn.query(
       'SELECT * FROM hd_entries WHERE campaign_id = ? AND code = ?', [config.id, code]);
     await conn.commit();
-    return { ...publicEntry(rows[0], config, now), winner: maskOpenid(rows[0].openid) };
+    return { ...publicEntry(rows[0], config, now, coupons), winner: maskOpenid(rows[0].openid) };
   } catch (error) {
     await conn.rollback().catch(() => {});
     throw error;
@@ -209,7 +237,28 @@ export async function redeem(pool, config, rawCode, staffId, now = Date.now()) {
   }
 }
 
-export async function listRecords(pool, config) {
+// Staff recovery sweep: (re)issue coupons for every cash-prize entry. Each
+// attempt is idempotent (deterministic requestId; the center also enforces
+// UNIQUE(ns, issuer, award)), so a retry never double-issues. Expired
+// unredeemed entries are skipped — their coupons would be unusable anyway.
+export async function retryCouponIssues(pool, config, coupons, now = Date.now()) {
+  if (!coupons) return { enabled: false, checked: 0, confirmed: 0, failed: 0, pending: 0 };
+  const [rows] = await pool.query(
+    'SELECT * FROM hd_entries WHERE campaign_id = ? ORDER BY id', [config.id]);
+  let checked = 0, confirmed = 0, failed = 0;
+  for (const row of rows) {
+    const prize = config.prizes.find(p => p.id === row.prize_id);
+    if (!prize || prize.kind !== 'cash' || !coupons.configured(prize.id)) continue;
+    if (!CODE_PATTERN.test(row.code || '')) continue;
+    if (config.redeemEndsAt && now >= config.redeemEndsAt && row.status !== 'redeemed') continue;
+    checked++;
+    const result = await coupons.issueEntry({ prize, owner: row.openid, code: row.code });
+    result.ok ? confirmed++ : failed++;
+  }
+  return { enabled: true, checked, confirmed, failed, pending: coupons.pendingCount() };
+}
+
+export async function listRecords(pool, config, coupons = null) {
   const [rows] = await pool.query(
     'SELECT * FROM hd_entries WHERE campaign_id = ? ORDER BY created_at DESC, id DESC', [config.id]);
   const byPrize = {};
@@ -228,5 +277,5 @@ export async function listRecords(pool, config) {
     };
   });
   const { total, remaining } = await inventoryTotals(pool, config.id);
-  return { summary: { entries: rows.length, pending, redeemed, noPrize: none, stockTotal: total, stockRemaining: remaining, byPrize }, records };
+  return { summary: { entries: rows.length, pending, redeemed, noPrize: none, stockTotal: total, stockRemaining: remaining, couponIssuesPending: coupons ? coupons.pendingCount() : 0, byPrize }, records };
 }

@@ -44,6 +44,8 @@ export function validateConfig(raw) {
       kind, qty: p.qty, probability: p.probability,
       label: typeof p.label === 'string' ? p.label : '', icon: typeof p.icon === 'string' ? p.icon : '',
       ...(kind === 'cash' && Number.isFinite(p.amount) && p.amount > 0 ? { amount: p.amount } : {}),
+      // Optional minimum spend (cents) enforced by the cashier-side coupon.
+      ...(kind === 'cash' && Number.isSafeInteger(p.minimumCents) && p.minimumCents >= 0 && p.minimumCents <= 1000000 ? { minimumCents: p.minimumCents } : {}),
     };
   });
   return {
