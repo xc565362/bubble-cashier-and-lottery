@@ -1,0 +1,315 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg: 11 13 16;
+    --panel: 21 25 33;
+    --panel-strong: 16 19 24;
+    --text: 245 242 238;
+    --muted: 141 134 128;
+    --inv: 255 255 255;
+    --accent-text: 255 138 92;
+    --ok: 52 211 153;
+    --ok-text: 110 231 183;
+    --warn: 251 191 36;
+    --warn-text: 252 211 77;
+    --warn-text-soft: 253 230 138;
+    --danger: 248 113 113;
+    --danger-text: 252 165 165;
+    --danger-strong: 239 68 68;
+    --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.35);
+    color-scheme: dark;
+  }
+
+  [data-theme='light'] {
+    --bg: 255 255 255;
+    --panel: 255 255 255;
+    --panel-strong: 255 255 255;
+    --text: 0 0 0;
+    --muted: 64 64 64;
+    --inv: 0 0 0;
+    --accent-text: 194 65 12;
+    --ok: 4 120 87;
+    --ok-text: 6 95 70;
+    --warn: 180 83 9;
+    --warn-text: 146 64 14;
+    --warn-text-soft: 120 53 15;
+    --danger: 185 28 28;
+    --danger-text: 127 29 29;
+    --danger-strong: 220 38 38;
+    --shadow-glass: 2px 2px 0 rgba(0, 0, 0, 0.1);
+    --shadow-card: 2px 2px 0 rgba(0, 0, 0, 0.08);
+    color-scheme: light;
+  }
+
+  /* App shell in light mode is pinned directly to the attribute — it never
+     depends on the variable chain or utility compilation. */
+  [data-theme='light'] html,
+  [data-theme='light'] body,
+  [data-theme='light'] #root {
+    background-color: #ffffff;
+    color: #000000;
+  }
+
+  html {
+    @apply bg-ink-900 text-milk antialiased;
+  }
+  body {
+    @apply min-h-screen overflow-x-hidden;
+    font-feature-settings: 'tnum';
+  }
+  ::selection {
+    @apply bg-coral/40 text-white;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 101, 46, 0.35) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-coral/30;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply rounded-2xl border border-white/[0.07] bg-white/[0.045] shadow-glass backdrop-blur-xl;
+  }
+  .glass-strong {
+    @apply rounded-2xl border border-white/10 bg-ink-850/90 shadow-glass backdrop-blur-2xl;
+  }
+  .field {
+    @apply w-full rounded-xl border border-white/10 bg-ink-800/80 px-4 py-3 text-[15px] text-milk placeholder:text-mist/50 outline-none transition
+      focus:border-coral/60 focus:ring-2 focus:ring-coral/25 disabled:opacity-50 min-h-[44px];
+  }
+  .field-label {
+    @apply mb-1.5 block text-[13px] font-medium tracking-wide text-mist;
+  }
+  .btn {
+    @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[15px] font-semibold transition
+      active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40 select-none;
+  }
+  .btn-primary {
+    @apply btn bg-gradient-to-br from-coral to-coral-deep text-[#fff] shadow-pop hover:shadow-glow;
+  }
+  .btn-ghost {
+    @apply btn border border-white/10 bg-white/[0.05] text-milk hover:border-coral/40 hover:bg-coral/10;
+  }
+  .btn-danger {
+    @apply btn border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20;
+  }
+  .btn-icon {
+    @apply inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-mist transition
+      hover:border-coral/40 hover:text-coral active:scale-95 disabled:pointer-events-none disabled:opacity-40;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium;
+  }
+  .badge-neutral {
+    @apply border-white/15 bg-white/[0.06] text-mist;
+  }
+  .badge-ok {
+    @apply border-emerald-400/30 bg-emerald-400/10 text-emerald-300;
+  }
+  .badge-warn {
+    @apply border-amber-400/30 bg-amber-400/10 text-amber-300;
+  }
+  .badge-danger {
+    @apply border-red-400/30 bg-red-400/10 text-red-300;
+  }
+  .badge-coral {
+    @apply border-coral/40 bg-coral/15 text-coral-soft;
+  }
+  .kicker {
+    @apply text-[11px] font-semibold uppercase tracking-[0.3em] text-coral;
+  }
+  .table-shell {
+    @apply glass overflow-hidden;
+  }
+  .table-row {
+    @apply border-b border-white/[0.05] transition last:border-0 hover:bg-white/[0.03];
+  }
+  .aurora-bg {
+    @apply pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-ink-900;
+  }
+  .aurora-grid {
+    background-image: linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    background-size: 44px 44px;
+    -webkit-mask-image: radial-gradient(ellipse at center, black, transparent 78%);
+    mask-image: radial-gradient(ellipse at center, black, transparent 78%);
+  }
+}
+
+/* Sunlight-proof light theme: solid surfaces, true-black text, hard edges, no glass. */
+@layer components {
+  [data-theme='light'] .glass {
+    background-color: #ffffff;
+    border-color: rgba(0, 0, 0, 0.22);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  [data-theme='light'] .glass-strong {
+    background-color: #ffffff;
+    border-color: rgba(0, 0, 0, 0.25);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  [data-theme='light'] .aurora-bg {
+    display: none;
+  }
+
+  /* chrome (header + bottom nav): solid white bars with real borders */
+  [data-theme='light'] .app-header,
+  [data-theme='light'] .app-nav {
+    background-color: #ffffff;
+    border-color: rgba(0, 0, 0, 0.2);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  [data-theme='light'] .app-nav .nav-btn[aria-current='page'] {
+    color: #000000;
+    font-weight: 700;
+  }
+  [data-theme='light'] .app-nav .nav-pill {
+    background-color: transparent;
+    box-shadow: inset 0 -3px 0 #ff652e;
+  }
+
+  /* buttons */
+  [data-theme='light'] .btn-primary {
+    background: #c2410c;
+    background-image: none;
+    border: 1px solid rgba(0, 0, 0, 0.35);
+    font-weight: 700;
+  }
+  [data-theme='light'] [class*='!from-emerald-500'] {
+    background: #047857 !important;
+    background-image: none !important;
+  }
+  [data-theme='light'] [class*='bg-red-500/80'] {
+    background-color: #b91c1c;
+  }
+  [data-theme='light'] .btn-ghost,
+  [data-theme='light'] .btn-icon {
+    background-color: #ffffff;
+    border-color: rgba(0, 0, 0, 0.28);
+    color: #000000;
+  }
+  [data-theme='light'] .btn-danger {
+    background-color: #fbdddd;
+    border-color: #b91c1c;
+    color: #7f1d1d;
+  }
+  [data-theme='light'] .shadow-pop,
+  [data-theme='light'] .hover\:shadow-glow:hover {
+    box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.22);
+  }
+
+  /* disabled stays legible: solid gray surface, full-contrast text */
+  [data-theme='light'] .btn:disabled,
+  [data-theme='light'] .btn-icon:disabled {
+    opacity: 1;
+    background: #e8e8e8;
+    background-image: none;
+    color: #4a4a4a;
+    border-color: rgba(0, 0, 0, 0.16);
+    box-shadow: none;
+  }
+  [data-theme='light'] .field:disabled {
+    opacity: 1;
+    background-color: #f0f0f0;
+    color: #4a4a4a;
+  }
+  [data-theme='light'] button.glass:disabled {
+    opacity: 1;
+    background-color: #ececec;
+    border-color: rgba(0, 0, 0, 0.16);
+    box-shadow: none;
+  }
+
+  /* inputs and tables */
+  [data-theme='light'] .field {
+    background-color: #ffffff;
+    border-color: rgba(0, 0, 0, 0.3);
+    color: #000000;
+  }
+  [data-theme='light'] .field::placeholder {
+    color: #595959;
+  }
+  [data-theme='light'] .table-row {
+    border-color: rgba(0, 0, 0, 0.16);
+  }
+  [data-theme='light'] .table-row:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+
+  /* badges: solid tints with dark text */
+  [data-theme='light'] .badge-neutral {
+    background-color: #f2f2f2;
+    border-color: rgba(0, 0, 0, 0.25);
+    color: #1a1a1a;
+  }
+  [data-theme='light'] .badge-ok {
+    background-color: #d7f5e5;
+    border-color: #047857;
+    color: #064e3b;
+  }
+  [data-theme='light'] .badge-warn {
+    background-color: #fdf0d3;
+    border-color: #b45309;
+    color: #78350f;
+  }
+  [data-theme='light'] .badge-danger {
+    background-color: #fbdddd;
+    border-color: #b91c1c;
+    color: #7f1d1d;
+  }
+  [data-theme='light'] .badge-coral {
+    background-color: #ffe4d3;
+    border-color: #c2410c;
+    color: #9a3412;
+  }
+
+  /* coral text on white must stay >= 4.5:1 */
+  [data-theme='light'] .text-coral,
+  [data-theme='light'] .hover\:text-coral:hover {
+    color: #c2410c;
+  }
+
+  /* fractional-alpha text and hairline borders are unreadable in sunlight — make them solid */
+  [data-theme='light'] [class*='text-mist/'] {
+    color: #404040;
+  }
+  [data-theme='light'] [class*='text-amber-200/'] {
+    color: #78350f;
+  }
+  [data-theme='light'] [class*='text-amber-300/'] {
+    color: #92400e;
+  }
+  [data-theme='light'] [class*='border-white/[0.0'] {
+    border-color: rgba(0, 0, 0, 0.16);
+  }
+  [data-theme='light'] [class*='border-white/1'] {
+    border-color: rgba(0, 0, 0, 0.2);
+  }
+}
+
+/* Animation kill-switch (management): zero motion anywhere in the app. */
+*, *::before, *::after {
+  animation: none !important;
+  transition: none !important;
+}
